@@ -1,0 +1,459 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
+import { toast } from "sonner"
+import type { CreateIntegrationResponse, Platform } from "@/lib/types"
+import {
+  buildDiscordIntegrationBody,
+  createIntegration,
+  deleteIntegration,
+  listIntegrations,
+  reregisterWebhook,
+} from "@/lib/api"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  EmptyState,
+  ErrorMessage,
+  RelativeTime,
+  WebhookStatusBadge,
+} from "@/components/shared"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ExternalLink, RefreshCw, Trash2 } from "lucide-react"
+
+type SuccessState = CreateIntegrationResponse & {
+  usedGuildId: boolean
+}
+
+function ConnectIntegrationDialog({ botId }: { botId: string }) {
+  const [open, setOpen] = useState(false)
+  const [platform, setPlatform] = useState<Platform>("telegram")
+  const [botToken, setBotToken] = useState("")
+  const [discordPublicKey, setDiscordPublicKey] = useState("")
+  const [discordGuildId, setDiscordGuildId] = useState("")
+  const [success, setSuccess] = useState<SuccessState | null>(null)
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (platform === "telegram") {
+        return createIntegration(botId, { platform: "telegram", botToken })
+      }
+      return createIntegration(
+        botId,
+        buildDiscordIntegrationBody({
+          botToken,
+          discordPublicKey,
+          discordGuildId,
+        }),
+      )
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["integrations", botId] })
+      setSuccess({
+        ...data,
+        usedGuildId: !!discordGuildId.trim(),
+      })
+      toast.success(`${platform} integration connected`)
+    },
+  })
+
+  function resetForm() {
+    setPlatform("telegram")
+    setBotToken("")
+    setDiscordPublicKey("")
+    setDiscordGuildId("")
+    setSuccess(null)
+    mutation.reset()
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) resetForm()
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button>Connect integration</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Connect integration</DialogTitle>
+          <DialogDescription>
+            Link a Telegram or Discord bot. One integration per platform per bot.
+          </DialogDescription>
+        </DialogHeader>
+        {success ? (
+          <div className="grid gap-4 text-sm">
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="font-medium">{success.platformUsername ?? "Connected"}</p>
+              <div className="mt-1">
+                <WebhookStatusBadge status={success.webhookStatus} />
+              </div>
+            </div>
+
+            {success.platform === "discord" && success.discordInviteUrl && (
+              <Button asChild className="w-full">
+                <a
+                  href={success.discordInviteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink />
+                  Invite bot to server
+                </a>
+              </Button>
+            )}
+
+            {success.platform === "discord" && (
+              <div className="space-y-2 text-muted-foreground">
+                <p>
+                  Users run{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    /ask question:Your question here
+                  </code>{" "}
+                  in Discord.
+                </p>
+                {success.usedGuildId ? (
+                  <p>/ask is available immediately in that server.</p>
+                ) : (
+                  <p>
+                    Global /ask may take up to ~1 hour. Invite the bot above, then
+                    disconnect and connect again with a server ID for instant
+                    availability.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(success.webhookSecret ||
+              success.discordPublicKey ||
+              success.discordApplicationId) && (
+              <>
+                <p className="font-medium text-amber-600 dark:text-amber-400">
+                  Copy these values now — they are shown once.
+                </p>
+                {success.webhookSecret && (
+                  <div className="grid gap-1">
+                    <Label>Webhook secret</Label>
+                    <code className="rounded-md bg-muted px-2 py-1 text-xs break-all">
+                      {success.webhookSecret}
+                    </code>
+                  </div>
+                )}
+                {success.discordPublicKey && (
+                  <div className="grid gap-1">
+                    <Label>Discord public key</Label>
+                    <code className="rounded-md bg-muted px-2 py-1 text-xs break-all">
+                      {success.discordPublicKey}
+                    </code>
+                  </div>
+                )}
+                {success.discordApplicationId && (
+                  <div className="grid gap-1">
+                    <Label>Discord application ID</Label>
+                    <code className="rounded-md bg-muted px-2 py-1 text-xs break-all">
+                      {success.discordApplicationId}
+                    </code>
+                  </div>
+                )}
+              </>
+            )}
+            <DialogFooter>
+              <Button onClick={() => setOpen(false)}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              mutation.mutate()
+            }}
+          >
+            <div className="grid gap-2">
+              <Label>Platform</Label>
+              <Select
+                value={platform}
+                onValueChange={(v) => setPlatform(v as Platform)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="discord">Discord</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="bot-token">Bot token</Label>
+              <Input
+                id="bot-token"
+                type="password"
+                value={botToken}
+                onChange={(e) => setBotToken(e.target.value)}
+                placeholder={
+                  platform === "telegram"
+                    ? "From @BotFather"
+                    : "From Discord Developer Portal → Bot"
+                }
+                required
+              />
+            </div>
+            {platform === "discord" && (
+              <>
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Recommended flow</p>
+                  <ol className="mt-2 list-decimal space-y-1 pl-4">
+                    <li>Connect with token + public key — leave server ID blank.</li>
+                    <li>Invite the bot via the link on the success screen.</li>
+                    <li>
+                      Optional: disconnect, then reconnect with the same credentials
+                      plus server ID for instant /ask.
+                    </li>
+                  </ol>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="discord-key">Application public key (hex)</Label>
+                  <Input
+                    id="discord-key"
+                    value={discordPublicKey}
+                    onChange={(e) => setDiscordPublicKey(e.target.value)}
+                    placeholder="0123abcd…"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Developer Portal → General Information → Public Key
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="discord-guild">Server ID (optional)</Label>
+                  <Input
+                    id="discord-guild"
+                    value={discordGuildId}
+                    onChange={(e) => setDiscordGuildId(e.target.value)}
+                    placeholder="123456789012345678"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Skip on first connect. Use after inviting the bot, or now if
+                    the bot is already in that server. Developer Mode →
+                    right-click server → Copy Server ID.
+                  </p>
+                </div>
+              </>
+            )}
+            {mutation.error && (
+              <ErrorMessage message={(mutation.error as Error).message} />
+            )}
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={
+                  !botToken.trim() ||
+                  mutation.isPending ||
+                  (platform === "discord" && !discordPublicKey.trim())
+                }
+              >
+                {mutation.isPending ? "Connecting…" : "Connect"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function BotIntegrationsTab({ botId }: { botId: string }) {
+  const queryClient = useQueryClient()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["integrations", botId],
+    queryFn: () => listIntegrations(botId),
+  })
+
+  const reregister = useMutation({
+    mutationFn: (integrationId: string) => reregisterWebhook(botId, integrationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations", botId] })
+      toast.success("Webhook re-registered")
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const remove = useMutation({
+    mutationFn: (integrationId: string) => deleteIntegration(botId, integrationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations", botId] })
+      toast.success("Integration removed")
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return <ErrorMessage message={(error as Error).message} />
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <ConnectIntegrationDialog botId={botId} />
+      </div>
+      {!data?.length ? (
+        <EmptyState
+          title="No integrations"
+          description="Connect Telegram or Discord to receive messages."
+        />
+      ) : (
+        <>
+          {data.some((i) => i.platform === "discord") && (
+            <p className="text-sm text-muted-foreground">
+              Discord users run{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                /ask question:…
+              </code>
+              . Invite links are only shown once at connect time. For instant /ask,
+              disconnect and reconnect with a server ID after inviting the bot.
+            </p>
+          )}
+          <div className="rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Webhook</TableHead>
+                  <TableHead>Token</TableHead>
+                  <TableHead>Connected</TableHead>
+                  <TableHead className="w-[120px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.map((integration) => (
+                  <TableRow key={integration._id}>
+                    <TableCell className="capitalize">{integration.platform}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p>{integration.platformUsername ?? "—"}</p>
+                        {integration.platform === "discord" &&
+                          integration.webhookStatus === "active" && (
+                            <p className="text-xs text-muted-foreground">
+                              Users run /ask in Discord
+                            </p>
+                          )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <WebhookStatusBadge status={integration.webhookStatus} />
+                        {integration.webhookError && (
+                          <span className="text-xs text-destructive">
+                            {integration.webhookError}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {integration.botToken}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime date={integration.createdAt} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Re-register webhook"
+                          disabled={reregister.isPending}
+                          onClick={() => reregister.mutate(integration._id)}
+                        >
+                          <RefreshCw />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon-sm">
+                              <Trash2 className="text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Disconnect integration?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This removes the {integration.platform} integration,
+                                unregisters the webhook
+                                {integration.platform === "discord" &&
+                                  ", and removes the /ask slash command"}
+                                .
+                                {integration.platform === "discord" &&
+                                  " You can reconnect with the same token and a server ID for instant /ask."}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => remove.mutate(integration._id)}
+                              >
+                                Disconnect
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,297 @@
+import type {
+  ApiErrorBody,
+  Bot,
+  CreateDiscordIntegrationRequest,
+  CreateIntegrationRequest,
+  CreateIntegrationResponse,
+  Dataset,
+  DatasetType,
+  HealthReadyResponse,
+  HealthResponse,
+  Integration,
+  Paginated,
+  PresignUploadResponse,
+} from "@/lib/types"
+
+const BOTMANAGER_URL =
+  import.meta.env.VITE_BOTMANAGER_URL ?? "http://localhost:3000"
+const ORG_ID = import.meta.env.VITE_ORG_ID as string | undefined
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+  }
+}
+
+function formatErrorMessage(body: ApiErrorBody, status: number): string {
+  if (Array.isArray(body.message)) return body.message.join(", ")
+  if (typeof body.message === "string") return body.message
+  return `HTTP ${status}`
+}
+
+export async function botmanagerFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers)
+  if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json")
+  }
+  if (ORG_ID) headers.set("X-Org-Id", ORG_ID)
+
+  const res = await fetch(`${BOTMANAGER_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: "include",
+  })
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ApiErrorBody
+    throw new ApiError(formatErrorMessage(body, res.status), res.status)
+  }
+  return res
+}
+
+export function getBotmanagerUrl(): string {
+  return BOTMANAGER_URL
+}
+
+// ——— Health ———
+
+export async function getHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${BOTMANAGER_URL}/health`)
+  return res.json() as Promise<HealthResponse>
+}
+
+export async function getHealthReady(): Promise<HealthReadyResponse> {
+  const res = await fetch(`${BOTMANAGER_URL}/health/ready`)
+  return res.json() as Promise<HealthReadyResponse>
+}
+
+// ——— Uploads ———
+
+export async function presignUpload(input: {
+  purpose: "avatar" | "dataset"
+  filename: string
+  contentType: string
+}): Promise<PresignUploadResponse> {
+  const res = await botmanagerFetch("/uploads/presign", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+  return res.json() as Promise<PresignUploadResponse>
+}
+
+export async function uploadToPresignedUrl(
+  uploadUrl: string,
+  file: File,
+): Promise<void> {
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
+    body: file,
+  })
+  if (!res.ok) throw new ApiError(`Upload failed: HTTP ${res.status}`, res.status)
+}
+
+// ——— Bots ———
+
+export async function listBots(params?: {
+  limit?: number
+  cursor?: string
+}): Promise<Paginated<Bot>> {
+  const search = new URLSearchParams()
+  if (params?.limit) search.set("limit", String(params.limit))
+  if (params?.cursor) search.set("cursor", params.cursor)
+  const qs = search.toString()
+  const res = await botmanagerFetch(`/bots${qs ? `?${qs}` : ""}`)
+  return res.json() as Promise<Paginated<Bot>>
+}
+
+export async function getBot(botId: string): Promise<Bot> {
+  const res = await botmanagerFetch(`/bots/${botId}`)
+  return res.json() as Promise<Bot>
+}
+
+export async function createBot(input: {
+  name: string
+  selectedModel: string
+  description?: string
+  avatarKey?: string
+}): Promise<Bot> {
+  const res = await botmanagerFetch("/bots", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+  return res.json() as Promise<Bot>
+}
+
+export async function createBotWithAvatar(input: {
+  name: string
+  selectedModel: string
+  description?: string
+  file: File
+}): Promise<Bot> {
+  const presign = await presignUpload({
+    purpose: "avatar",
+    filename: input.file.name,
+    contentType: input.file.type,
+  })
+  await uploadToPresignedUrl(presign.uploadUrl, input.file)
+  return createBot({
+    name: input.name,
+    selectedModel: input.selectedModel,
+    description: input.description,
+    avatarKey: presign.key,
+  })
+}
+
+export async function deleteBot(botId: string): Promise<void> {
+  await botmanagerFetch(`/bots/${botId}`, { method: "DELETE" })
+}
+
+// ——— Datasets ———
+
+export async function listDatasets(params?: {
+  limit?: number
+  cursor?: string
+}): Promise<Paginated<Dataset>> {
+  const search = new URLSearchParams()
+  if (params?.limit) search.set("limit", String(params.limit))
+  if (params?.cursor) search.set("cursor", params.cursor)
+  const qs = search.toString()
+  const res = await botmanagerFetch(`/datasets${qs ? `?${qs}` : ""}`)
+  return res.json() as Promise<Paginated<Dataset>>
+}
+
+export async function getDataset(datasetId: string): Promise<Dataset> {
+  const res = await botmanagerFetch(`/datasets/${datasetId}`)
+  return res.json() as Promise<Dataset>
+}
+
+export async function createDataset(input: {
+  name: string
+  type: DatasetType
+  storageKey?: string
+  url?: string
+}): Promise<Dataset> {
+  const res = await botmanagerFetch("/datasets", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+  return res.json() as Promise<Dataset>
+}
+
+export async function createDatasetWithFile(input: {
+  name: string
+  type: DatasetType
+  file: File
+}): Promise<Dataset> {
+  const presign = await presignUpload({
+    purpose: "dataset",
+    filename: input.file.name,
+    contentType: input.file.type,
+  })
+  await uploadToPresignedUrl(presign.uploadUrl, input.file)
+  return createDataset({
+    name: input.name,
+    type: input.type,
+    storageKey: presign.key,
+  })
+}
+
+export async function deleteDataset(datasetId: string): Promise<void> {
+  await botmanagerFetch(`/datasets/${datasetId}`, { method: "DELETE" })
+}
+
+// ——— Bot ↔ Dataset links ———
+
+export async function listBotDatasets(botId: string): Promise<Dataset[]> {
+  const res = await botmanagerFetch(`/bots/${botId}/datasets`)
+  return res.json() as Promise<Dataset[]>
+}
+
+export async function linkDatasetsToBot(
+  botId: string,
+  datasetIds: string[],
+): Promise<void> {
+  await botmanagerFetch(`/bots/${botId}/datasets`, {
+    method: "POST",
+    body: JSON.stringify({ datasetIds }),
+  })
+}
+
+export async function unlinkDatasetFromBot(
+  botId: string,
+  datasetId: string,
+): Promise<void> {
+  await botmanagerFetch(`/bots/${botId}/datasets/${datasetId}`, {
+    method: "DELETE",
+  })
+}
+
+// ——— Integrations ———
+
+export function buildDiscordIntegrationBody(input: {
+  botToken: string
+  discordPublicKey: string
+  discordGuildId?: string
+}): CreateDiscordIntegrationRequest {
+  const body: CreateDiscordIntegrationRequest = {
+    platform: "discord",
+    botToken: input.botToken.trim(),
+    discordPublicKey: input.discordPublicKey.trim(),
+  }
+  const guildId = input.discordGuildId?.trim()
+  if (guildId) body.discordGuildId = guildId
+  return body
+}
+
+export async function listIntegrations(botId: string): Promise<Integration[]> {
+  const res = await botmanagerFetch(`/bots/${botId}/integrations`)
+  return res.json() as Promise<Integration[]>
+}
+
+export async function createIntegration(
+  botId: string,
+  input: CreateIntegrationRequest,
+): Promise<CreateIntegrationResponse> {
+  const body: CreateIntegrationRequest =
+    input.platform === "discord"
+      ? buildDiscordIntegrationBody({
+          botToken: input.botToken,
+          discordPublicKey: input.discordPublicKey ?? "",
+          discordGuildId: input.discordGuildId,
+        })
+      : { platform: "telegram", botToken: input.botToken.trim() }
+
+  const res = await botmanagerFetch(`/bots/${botId}/integrations`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+  return res.json() as Promise<CreateIntegrationResponse>
+}
+
+export async function reregisterWebhook(
+  botId: string,
+  integrationId: string,
+): Promise<Integration> {
+  const res = await botmanagerFetch(
+    `/bots/${botId}/integrations/${integrationId}/webhook`,
+    { method: "POST" },
+  )
+  return res.json() as Promise<Integration>
+}
+
+export async function deleteIntegration(
+  botId: string,
+  integrationId: string,
+): Promise<void> {
+  await botmanagerFetch(`/bots/${botId}/integrations/${integrationId}`, {
+    method: "DELETE",
+  })
+}
