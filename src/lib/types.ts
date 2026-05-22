@@ -9,10 +9,20 @@ export interface Bot {
   name: string
   description?: string
   selectedModel: string
+  systemPrompt?: string
   avatarUrl?: string
   avatarKey?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface UpdateBotRequest {
+  name?: string
+  description?: string
+  selectedModel?: string
+  /** Empty string clears to server default. */
+  systemPrompt?: string
+  avatarKey?: string
 }
 
 export interface Dataset {
@@ -41,6 +51,8 @@ export interface Integration {
   webhookRegisteredAt?: string
   platformBotId?: string
   platformUsername?: string
+  /** Discord only — registered slash command name (default: ask) */
+  discordCommand?: string
   botToken: string
   createdAt: string
   updatedAt: string
@@ -57,7 +69,9 @@ export interface CreateDiscordIntegrationRequest {
   platform: "discord"
   botToken: string
   discordPublicKey?: string
-  /** Guild-scoped /ask (instant). Omit for global registration (~1h). */
+  /** Slash command name (default: ask). Registers /{name} with a required question option. */
+  discordCommand?: string
+  /** Guild-scoped command (instant). Omit for global registration (~1h). */
   discordGuildId?: string
 }
 

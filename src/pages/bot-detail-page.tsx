@@ -4,6 +4,7 @@ import { getBot } from "@/lib/api"
 import { getModelLabel } from "@/lib/models"
 import { BotDatasetsTab } from "@/components/bots/bot-datasets-tab"
 import { BotIntegrationsTab } from "@/components/bots/bot-integrations-tab"
+import { BotOverviewTab } from "@/components/bots/bot-overview-tab"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -82,11 +83,15 @@ export function BotDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="knowledge">
+      <Tabs defaultValue="overview">
         <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
+        <TabsContent value="overview" className="mt-4">
+          <BotOverviewTab bot={bot} />
+        </TabsContent>
         <TabsContent value="knowledge" className="mt-4">
           <BotDatasetsTab botId={bot._id} />
         </TabsContent>

@@ -31,6 +31,7 @@ export function CreateBotDialog() {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [selectedModel, setSelectedModel] = useState<string>(OPENROUTER_MODELS[0].id)
+  const [systemPrompt, setSystemPrompt] = useState("")
   const [avatar, setAvatar] = useState<File | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -38,9 +39,20 @@ export function CreateBotDialog() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (avatar) {
-        return createBotWithAvatar({ name, selectedModel, description, file: avatar })
+        return createBotWithAvatar({
+          name,
+          selectedModel,
+          description,
+          systemPrompt: systemPrompt.trim() || undefined,
+          file: avatar,
+        })
       }
-      return createBot({ name, selectedModel, description: description || undefined })
+      return createBot({
+        name,
+        selectedModel,
+        description: description || undefined,
+        systemPrompt: systemPrompt.trim() || undefined,
+      })
     },
     onSuccess: (bot) => {
       queryClient.invalidateQueries({ queryKey: ["bots"] })
@@ -55,6 +67,7 @@ export function CreateBotDialog() {
     setName("")
     setDescription("")
     setSelectedModel(OPENROUTER_MODELS[0].id)
+    setSystemPrompt("")
     setAvatar(null)
     mutation.reset()
   }
@@ -74,7 +87,7 @@ export function CreateBotDialog() {
         <DialogHeader>
           <DialogTitle>Create bot</DialogTitle>
           <DialogDescription>
-            Configure a new bot with a model and optional avatar.
+            Configure a new bot with a model, optional system prompt, and avatar.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -118,6 +131,16 @@ export function CreateBotDialog() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="bot-system-prompt">System prompt (optional)</Label>
+            <Textarea
+              id="bot-system-prompt"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value.slice(0, 4000))}
+              placeholder="Reply in a warm, professional tone…"
+              rows={3}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="bot-avatar">Avatar (optional)</Label>

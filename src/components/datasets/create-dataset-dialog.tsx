@@ -130,6 +130,11 @@ export function CreateDatasetDialog() {
                 placeholder="https://example.com/docs"
                 required={mode === "website"}
               />
+              <p className="text-xs text-muted-foreground">
+                Ingestion is async and uses Firecrawl on the ingestor service
+                (operators configure FIRECRAWL_API_KEY — not a frontend env).
+                Multiple linked pages are crawled and indexed.
+              </p>
             </TabsContent>
             {mutation.error && (
               <ErrorMessage message={(mutation.error as Error).message} />

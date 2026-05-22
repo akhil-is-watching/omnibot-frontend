@@ -11,6 +11,7 @@ import type {
   Integration,
   Paginated,
   PresignUploadResponse,
+  UpdateBotRequest,
 } from "@/lib/types"
 
 const BOTMANAGER_URL =
@@ -121,6 +122,7 @@ export async function createBot(input: {
   name: string
   selectedModel: string
   description?: string
+  systemPrompt?: string
   avatarKey?: string
 }): Promise<Bot> {
   const res = await botmanagerFetch("/bots", {
@@ -134,6 +136,7 @@ export async function createBotWithAvatar(input: {
   name: string
   selectedModel: string
   description?: string
+  systemPrompt?: string
   file: File
 }): Promise<Bot> {
   const presign = await presignUpload({
@@ -146,8 +149,34 @@ export async function createBotWithAvatar(input: {
     name: input.name,
     selectedModel: input.selectedModel,
     description: input.description,
+    systemPrompt: input.systemPrompt,
     avatarKey: presign.key,
   })
+}
+
+export async function updateBot(
+  botId: string,
+  input: UpdateBotRequest,
+): Promise<Bot> {
+  const res = await botmanagerFetch(`/bots/${botId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+  return res.json() as Promise<Bot>
+}
+
+export async function updateBotWithAvatar(
+  botId: string,
+  input: UpdateBotRequest & { file: File },
+): Promise<Bot> {
+  const presign = await presignUpload({
+    purpose: "avatar",
+    filename: input.file.name,
+    contentType: input.file.type,
+  })
+  await uploadToPresignedUrl(presign.uploadUrl, input.file)
+  const { file: _, ...rest } = input
+  return updateBot(botId, { ...rest, avatarKey: presign.key })
 }
 
 export async function deleteBot(botId: string): Promise<void> {
@@ -240,6 +269,7 @@ export function buildDiscordIntegrationBody(input: {
   botToken: string
   discordPublicKey: string
   discordGuildId?: string
+  discordCommand?: string
 }): CreateDiscordIntegrationRequest {
   const body: CreateDiscordIntegrationRequest = {
     platform: "discord",
@@ -248,6 +278,8 @@ export function buildDiscordIntegrationBody(input: {
   }
   const guildId = input.discordGuildId?.trim()
   if (guildId) body.discordGuildId = guildId
+  const command = input.discordCommand?.trim()
+  if (command) body.discordCommand = command
   return body
 }
 
@@ -266,6 +298,7 @@ export async function createIntegration(
           botToken: input.botToken,
           discordPublicKey: input.discordPublicKey ?? "",
           discordGuildId: input.discordGuildId,
+          discordCommand: input.discordCommand,
         })
       : { platform: "telegram", botToken: input.botToken.trim() }
 

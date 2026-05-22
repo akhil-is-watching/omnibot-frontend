@@ -9,6 +9,11 @@ import {
   listIntegrations,
   reregisterWebhook,
 } from "@/lib/api"
+import {
+  DEFAULT_DISCORD_COMMAND,
+  formatDiscordCommand,
+  formatDiscordCommandUsage,
+} from "@/lib/discord"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -60,12 +65,16 @@ type SuccessState = CreateIntegrationResponse & {
   usedGuildId: boolean
 }
 
+const DISCORD_COMMAND_PATTERN = /^[\w-]{1,32}$/
+
 function ConnectIntegrationDialog({ botId }: { botId: string }) {
   const [open, setOpen] = useState(false)
   const [platform, setPlatform] = useState<Platform>("telegram")
   const [botToken, setBotToken] = useState("")
   const [discordPublicKey, setDiscordPublicKey] = useState("")
+  const [discordCommand, setDiscordCommand] = useState("")
   const [discordGuildId, setDiscordGuildId] = useState("")
+  const [commandError, setCommandError] = useState<string | null>(null)
   const [success, setSuccess] = useState<SuccessState | null>(null)
   const queryClient = useQueryClient()
 
@@ -80,6 +89,7 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
           botToken,
           discordPublicKey,
           discordGuildId,
+          discordCommand,
         }),
       )
     },
@@ -97,7 +107,9 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
     setPlatform("telegram")
     setBotToken("")
     setDiscordPublicKey("")
+    setDiscordCommand("")
     setDiscordGuildId("")
+    setCommandError(null)
     setSuccess(null)
     mutation.reset()
   }
@@ -145,19 +157,30 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
             {success.platform === "discord" && (
               <div className="space-y-2 text-muted-foreground">
                 <p>
+                  Command:{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    {formatDiscordCommand(success.discordCommand)}
+                  </code>
+                </p>
+                <p>
                   Users run{" "}
                   <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    /ask question:Your question here
+                    {formatDiscordCommandUsage(success.discordCommand)}
                   </code>{" "}
                   in Discord.
                 </p>
                 {success.usedGuildId ? (
-                  <p>/ask is available immediately in that server.</p>
+                  <p>
+                    {formatDiscordCommand(success.discordCommand)} is available
+                    immediately in that server.
+                  </p>
                 ) : (
                   <p>
-                    Global /ask may take up to ~1 hour. Invite the bot above, then
-                    disconnect and connect again with a server ID for instant
-                    availability.
+                    Global {formatDiscordCommand(success.discordCommand)} may
+                    take up to ~1 hour. Invite the bot above, then disconnect
+                    and connect again with a server ID for instant availability.
+                    To rename the command, disconnect and reconnect with a new
+                    name.
                   </p>
                 )}
               </div>
@@ -205,6 +228,16 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault()
+              if (platform === "discord") {
+                const cmd = discordCommand.trim()
+                if (cmd && !DISCORD_COMMAND_PATTERN.test(cmd)) {
+                  setCommandError(
+                    "Use 1–32 lowercase letters, numbers, underscores, or hyphens.",
+                  )
+                  return
+                }
+                setCommandError(null)
+              }
               mutation.mutate()
             }}
           >
@@ -243,11 +276,14 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
                 <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
                   <p className="font-medium text-foreground">Recommended flow</p>
                   <ol className="mt-2 list-decimal space-y-1 pl-4">
-                    <li>Connect with token + public key — leave server ID blank.</li>
+                    <li>
+                      Connect with token + public key + optional command name
+                      (default {DEFAULT_DISCORD_COMMAND}) — leave server ID blank.
+                    </li>
                     <li>Invite the bot via the link on the success screen.</li>
                     <li>
-                      Optional: disconnect, then reconnect with the same credentials
-                      plus server ID for instant /ask.
+                      Optional: disconnect, then reconnect with the same
+                      credentials plus server ID for instant command availability.
                     </li>
                   </ol>
                 </div>
@@ -262,6 +298,27 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
                   />
                   <p className="text-xs text-muted-foreground">
                     Developer Portal → General Information → Public Key
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="discord-command">Slash command name (optional)</Label>
+                  <Input
+                    id="discord-command"
+                    value={discordCommand}
+                    onChange={(e) => {
+                      setDiscordCommand(e.target.value.toLowerCase())
+                      setCommandError(null)
+                    }}
+                    placeholder={DEFAULT_DISCORD_COMMAND}
+                    aria-invalid={!!commandError}
+                  />
+                  {commandError && (
+                    <p className="text-xs text-destructive">{commandError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Registers /{"{name}"} with a required question option. Default:{" "}
+                    {DEFAULT_DISCORD_COMMAND}. Rename only via disconnect +
+                    reconnect.
                   </p>
                 </div>
                 <div className="grid gap-2">
@@ -354,12 +411,15 @@ export function BotIntegrationsTab({ botId }: { botId: string }) {
         <>
           {data.some((i) => i.platform === "discord") && (
             <p className="text-sm text-muted-foreground">
-              Discord users run{" "}
+              Discord users run slash commands such as{" "}
               <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                /ask question:…
+                {formatDiscordCommandUsage(
+                  data.find((i) => i.platform === "discord")?.discordCommand,
+                )}
               </code>
-              . Invite links are only shown once at connect time. For instant /ask,
-              disconnect and reconnect with a server ID after inviting the bot.
+              . Invite links are only shown once at connect time. For instant
+              commands, disconnect and reconnect with a server ID after inviting
+              the bot.
             </p>
           )}
           <div className="rounded-xl border">
@@ -384,7 +444,9 @@ export function BotIntegrationsTab({ botId }: { botId: string }) {
                         {integration.platform === "discord" &&
                           integration.webhookStatus === "active" && (
                             <p className="text-xs text-muted-foreground">
-                              Users run /ask in Discord
+                              Users run{" "}
+                              {formatDiscordCommand(integration.discordCommand)} in
+                              Discord
                             </p>
                           )}
                       </div>
@@ -429,10 +491,10 @@ export function BotIntegrationsTab({ botId }: { botId: string }) {
                                 This removes the {integration.platform} integration,
                                 unregisters the webhook
                                 {integration.platform === "discord" &&
-                                  ", and removes the /ask slash command"}
+                                  `, and removes the ${formatDiscordCommand(integration.discordCommand)} slash command`}
                                 .
                                 {integration.platform === "discord" &&
-                                  " You can reconnect with the same token and a server ID for instant /ask."}
+                                  " You can reconnect with the same token and a server ID for instant command availability."}
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
