@@ -1,6 +1,8 @@
 import type { ReactNode } from "react"
 import { formatDistanceToNow } from "date-fns"
 import type { DatasetStatus, WebhookStatus } from "@/lib/types"
+import type { Bot } from "@/lib/types"
+import { isBotPublished } from "@/lib/bot"
 import { Badge } from "@/components/ui/badge"
 
 const datasetVariants: Record<
@@ -28,6 +30,20 @@ const webhookVariants: Record<
 
 export function WebhookStatusBadge({ status }: { status: WebhookStatus }) {
   return <Badge variant={webhookVariants[status]}>{status}</Badge>
+}
+
+export function BotPublishStatusBadge({ bot }: { bot: Bot }) {
+  if (!isBotPublished(bot)) {
+    return <Badge variant="outline">Unpublished</Badge>
+  }
+  if (bot.hasUnpublishedChanges) {
+    return <Badge variant="secondary">Draft changes</Badge>
+  }
+  return (
+    <Badge variant="default">
+      Live v{bot.publishedVersion ?? bot.published?.version ?? "?"}
+    </Badge>
+  )
 }
 
 export function RelativeTime({ date }: { date: string }) {

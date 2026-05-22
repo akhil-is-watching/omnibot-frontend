@@ -79,6 +79,10 @@ export function BotOverviewTab({ bot }: { bot: Bot }) {
         mutation.mutate()
       }}
     >
+      <p className="text-sm text-muted-foreground">
+        These fields edit the <strong>draft</strong>. Publish to push changes live
+        for Telegram and Discord.
+      </p>
       <div className="flex items-center gap-4">
         <Avatar className="size-14">
           {bot.avatarUrl && !avatar && (

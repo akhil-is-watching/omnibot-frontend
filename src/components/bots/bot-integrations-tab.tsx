@@ -67,7 +67,13 @@ type SuccessState = CreateIntegrationResponse & {
 
 const DISCORD_COMMAND_PATTERN = /^[\w-]{1,32}$/
 
-function ConnectIntegrationDialog({ botId }: { botId: string }) {
+function ConnectIntegrationDialog({
+  botId,
+  disabled,
+}: {
+  botId: string
+  disabled?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const [platform, setPlatform] = useState<Platform>("telegram")
   const [botToken, setBotToken] = useState("")
@@ -123,7 +129,7 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button>Connect integration</Button>
+        <Button disabled={disabled}>Connect integration</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -359,7 +365,13 @@ function ConnectIntegrationDialog({ botId }: { botId: string }) {
   )
 }
 
-export function BotIntegrationsTab({ botId }: { botId: string }) {
+export function BotIntegrationsTab({
+  botId,
+  isPublished,
+}: {
+  botId: string
+  isPublished: boolean
+}) {
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ["integrations", botId],
@@ -399,8 +411,17 @@ export function BotIntegrationsTab({ botId }: { botId: string }) {
 
   return (
     <div className="space-y-4">
+      {!isPublished && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium">Publish required</p>
+          <p className="mt-1 text-muted-foreground">
+            Connect Telegram or Discord after the bot has been published at least
+            once. Use the publish panel above, then return here.
+          </p>
+        </div>
+      )}
       <div className="flex justify-end">
-        <ConnectIntegrationDialog botId={botId} />
+        <ConnectIntegrationDialog botId={botId} disabled={!isPublished} />
       </div>
       {!data?.length ? (
         <EmptyState

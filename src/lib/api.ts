@@ -183,6 +183,29 @@ export async function deleteBot(botId: string): Promise<void> {
   await botmanagerFetch(`/bots/${botId}`, { method: "DELETE" })
 }
 
+export async function publishBot(botId: string): Promise<Bot> {
+  const res = await botmanagerFetch(`/bots/${botId}/publish`, { method: "POST" })
+  return res.json() as Promise<Bot>
+}
+
+export async function discardBotDraft(botId: string): Promise<Bot> {
+  const res = await botmanagerFetch(`/bots/${botId}/discard-draft`, {
+    method: "POST",
+  })
+  return res.json() as Promise<Bot>
+}
+
+export async function playgroundChat(
+  botId: string,
+  message: string,
+): Promise<Record<string, unknown>> {
+  const res = await botmanagerFetch(`/bots/${botId}/playground/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  })
+  return res.json() as Promise<Record<string, unknown>>
+}
+
 // ——— Datasets ———
 
 export async function listDatasets(params?: {

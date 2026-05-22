@@ -75,6 +75,7 @@ function LinkDatasetsDialog({
     mutationFn: () => linkDatasetsToBot(botId, [...selected]),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bot-datasets", botId] })
+      queryClient.invalidateQueries({ queryKey: ["bot", botId] })
       toast.success("Datasets linked")
       setOpen(false)
       setSelected(new Set())
@@ -168,6 +169,7 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
     mutationFn: (datasetId: string) => unlinkDatasetFromBot(botId, datasetId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bot-datasets", botId] })
+      queryClient.invalidateQueries({ queryKey: ["bot", botId] })
       toast.success("Dataset unlinked")
     },
     onError: (err: Error) => toast.error(err.message),
@@ -190,6 +192,10 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Draft knowledge links — publish to update what Telegram and Discord use
+        for RAG.
+      </p>
       <div className="flex justify-end">
         <LinkDatasetsDialog botId={botId} linkedIds={linkedIds} />
       </div>

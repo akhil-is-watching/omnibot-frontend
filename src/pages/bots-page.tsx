@@ -30,6 +30,7 @@ import {
   ErrorMessage,
   PageHeader,
   RelativeTime,
+  BotPublishStatusBadge,
 } from "@/components/shared"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Trash2 } from "lucide-react"
@@ -90,6 +91,7 @@ export function BotsPage() {
                 <TableRow>
                   <TableHead>Bot</TableHead>
                   <TableHead>Model</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="w-[60px]" />
                 </TableRow>
@@ -122,6 +124,9 @@ export function BotsPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {getModelLabel(bot.selectedModel)}
+                    </TableCell>
+                    <TableCell>
+                      <BotPublishStatusBadge bot={bot} />
                     </TableCell>
                     <TableCell>
                       <RelativeTime date={bot.createdAt} />

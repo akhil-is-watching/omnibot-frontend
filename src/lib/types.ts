@@ -3,6 +3,18 @@ export type DatasetStatus = "pending" | "processing" | "completed" | "failed"
 export type Platform = "telegram" | "discord"
 export type WebhookStatus = "pending" | "active" | "failed"
 
+export interface BotPublishedSnapshot {
+  version: number
+  publishedAt: string
+  name: string
+  description?: string
+  selectedModel: string
+  systemPrompt?: string
+  avatarUrl?: string
+  avatarKey?: string
+  datasetIds: string[]
+}
+
 export interface Bot {
   _id: string
   orgId: string
@@ -12,6 +24,10 @@ export interface Bot {
   systemPrompt?: string
   avatarUrl?: string
   avatarKey?: string
+  published?: BotPublishedSnapshot
+  hasUnpublishedChanges?: boolean
+  publishedVersion?: number
+  draftLinkedDatasetIds?: string[]
   createdAt: string
   updatedAt: string
 }
