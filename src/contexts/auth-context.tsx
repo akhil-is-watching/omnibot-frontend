@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       response.user ??
       (() => {
         const email = input.email || emailFromToken(response.accessToken)
-        return email ? { email, name: input.name } : null
+        return email ? { email } : null
       })()
     if (nextUser) {
       setStoredUser(nextUser)

@@ -23,7 +23,6 @@ export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [name, setName] = useState("")
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -31,11 +30,7 @@ export function LoginPage() {
         await login({ email: email.trim(), password })
         return
       }
-      await register({
-        email: email.trim(),
-        password,
-        name: name.trim() || undefined,
-      })
+      await register({ email: email.trim(), password })
     },
   })
 
@@ -76,16 +71,9 @@ export function LoginPage() {
               }}
             >
               {mode === "register" && (
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name (optional)</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                    placeholder="Your name"
-                  />
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Create an account with your email and password.
+                </p>
               )}
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
