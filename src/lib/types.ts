@@ -56,7 +56,7 @@ export interface Dataset {
   updatedAt: string
 }
 
-/** POST /datasets — discriminated by `type`. */
+/** POST /api/hub/datasets — discriminated by `type`. */
 export type CreateDatasetRequest =
   | { name: string; type: "pdf" | "txt" | "md"; storageKey: string }
   | { name: string; type: "text"; content: string }

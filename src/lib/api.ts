@@ -27,6 +27,17 @@ import {
 
 const BOTMANAGER_URL =
   import.meta.env.VITE_BOTMANAGER_URL ?? "http://localhost:3000"
+const API_PREFIX = "/api/hub"
+
+/** Bot Manager routes are mounted under /api/hub on the service origin. */
+export function hubPath(path: string): string {
+  if (path.startsWith(API_PREFIX)) return path
+  return `${API_PREFIX}${path.startsWith("/") ? path : `/${path}`}`
+}
+
+export function getApiPrefix(): string {
+  return API_PREFIX
+}
 
 let accessToken: string | null = getAccessToken()
 let onUnauthorized: (() => void) | null = null
@@ -72,7 +83,7 @@ export async function botmanagerFetch(
   const token = accessToken ?? getAccessToken()
   if (token) headers.set("Authorization", `Bearer ${token}`)
 
-  const res = await fetch(`${BOTMANAGER_URL}${path}`, {
+  const res = await fetch(`${BOTMANAGER_URL}${hubPath(path)}`, {
     ...init,
     headers,
     credentials: "include",
@@ -116,7 +127,7 @@ async function publicJsonFetch<T>(
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
   }
-  const res = await fetch(`${BOTMANAGER_URL}${path}`, {
+  const res = await fetch(`${BOTMANAGER_URL}${hubPath(path)}`, {
     ...init,
     headers,
     credentials: "include",
@@ -154,12 +165,12 @@ export function applyAuthSession(response: AuthResponse): void {
 // ——— Health ———
 
 export async function getHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${BOTMANAGER_URL}/health`)
+  const res = await fetch(`${BOTMANAGER_URL}${hubPath("/health")}`)
   return res.json() as Promise<HealthResponse>
 }
 
 export async function getHealthReady(): Promise<HealthReadyResponse> {
-  const res = await fetch(`${BOTMANAGER_URL}/health/ready`)
+  const res = await fetch(`${BOTMANAGER_URL}${hubPath("/health/ready")}`)
   return res.json() as Promise<HealthReadyResponse>
 }
 
