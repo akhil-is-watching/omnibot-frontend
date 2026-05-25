@@ -1,5 +1,7 @@
 import type {
   ApiErrorBody,
+  AuthResponse,
+  AuthUser,
   Bot,
   CreateDiscordIntegrationRequest,
   CreateIntegrationRequest,
@@ -9,15 +11,39 @@ import type {
   HealthReadyResponse,
   HealthResponse,
   Integration,
+  LoginRequest,
   Paginated,
   PresignUploadResponse,
+  RegisterRequest,
   UpdateBotRequest,
 } from "@/lib/types"
 import { validateTextDatasetContent } from "@/lib/datasets"
+import {
+  clearAuthStorage,
+  getAccessToken,
+  setAccessToken as persistAccessToken,
+  setStoredUser,
+} from "@/lib/auth-storage"
 
 const BOTMANAGER_URL =
   import.meta.env.VITE_BOTMANAGER_URL ?? "http://localhost:3000"
-const ORG_ID = import.meta.env.VITE_ORG_ID as string | undefined
+
+let accessToken: string | null = getAccessToken()
+let onUnauthorized: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler
+}
+
+export function setAccessToken(token: string): void {
+  accessToken = token
+  persistAccessToken(token)
+}
+
+export function clearAccessToken(): void {
+  accessToken = null
+  clearAuthStorage()
+}
 
 export class ApiError extends Error {
   status: number
@@ -43,7 +69,8 @@ export async function botmanagerFetch(
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
   }
-  if (ORG_ID) headers.set("X-Org-Id", ORG_ID)
+  const token = accessToken ?? getAccessToken()
+  if (token) headers.set("Authorization", `Bearer ${token}`)
 
   const res = await fetch(`${BOTMANAGER_URL}${path}`, {
     ...init,
@@ -53,6 +80,10 @@ export async function botmanagerFetch(
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as ApiErrorBody
+    if (res.status === 401 && token) {
+      clearAccessToken()
+      onUnauthorized?.()
+    }
     throw new ApiError(formatErrorMessage(body, res.status), res.status)
   }
   return res
@@ -60,6 +91,64 @@ export async function botmanagerFetch(
 
 export function getBotmanagerUrl(): string {
   return BOTMANAGER_URL
+}
+
+function normalizeAuthResponse(data: Record<string, unknown>): AuthResponse {
+  const token = data.accessToken ?? data.access_token
+  if (typeof token !== "string" || !token) {
+    throw new ApiError("No access token in response", 500)
+  }
+  const user = data.user
+  return {
+    accessToken: token,
+    user:
+      user && typeof user === "object"
+        ? (user as AuthUser)
+        : undefined,
+  }
+}
+
+async function publicJsonFetch<T>(
+  path: string,
+  init: RequestInit,
+): Promise<T> {
+  const headers = new Headers(init.headers)
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
+  const res = await fetch(`${BOTMANAGER_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: "include",
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ApiErrorBody
+    throw new ApiError(formatErrorMessage(body, res.status), res.status)
+  }
+  return res.json() as Promise<T>
+}
+
+// ——— Auth ———
+
+export async function login(input: LoginRequest): Promise<AuthResponse> {
+  const data = await publicJsonFetch<Record<string, unknown>>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+  return normalizeAuthResponse(data)
+}
+
+export async function register(input: RegisterRequest): Promise<AuthResponse> {
+  const data = await publicJsonFetch<Record<string, unknown>>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+  return normalizeAuthResponse(data)
+}
+
+export function applyAuthSession(response: AuthResponse): void {
+  setAccessToken(response.accessToken)
+  if (response.user) setStoredUser(response.user)
 }
 
 // ——— Health ———
