@@ -4,8 +4,8 @@ import type {
   CreateDiscordIntegrationRequest,
   CreateIntegrationRequest,
   CreateIntegrationResponse,
+  CreateDatasetRequest,
   Dataset,
-  DatasetType,
   HealthReadyResponse,
   HealthResponse,
   Integration,
@@ -13,6 +13,7 @@ import type {
   PresignUploadResponse,
   UpdateBotRequest,
 } from "@/lib/types"
+import { validateTextDatasetContent } from "@/lib/datasets"
 
 const BOTMANAGER_URL =
   import.meta.env.VITE_BOTMANAGER_URL ?? "http://localhost:3000"
@@ -225,12 +226,7 @@ export async function getDataset(datasetId: string): Promise<Dataset> {
   return res.json() as Promise<Dataset>
 }
 
-export async function createDataset(input: {
-  name: string
-  type: DatasetType
-  storageKey?: string
-  url?: string
-}): Promise<Dataset> {
+export async function createDataset(input: CreateDatasetRequest): Promise<Dataset> {
   const res = await botmanagerFetch("/datasets", {
     method: "POST",
     body: JSON.stringify(input),
@@ -238,9 +234,29 @@ export async function createDataset(input: {
   return res.json() as Promise<Dataset>
 }
 
+export async function createTextDataset(input: {
+  name: string
+  content: string
+}): Promise<Dataset> {
+  const trimmed = input.content.trim()
+  if (!trimmed) {
+    throw new ApiError("Content is required", 400)
+  }
+  const error = validateTextDatasetContent(trimmed)
+  if (error) throw new ApiError(error, 400)
+  return createDataset({ name: input.name, type: "text", content: trimmed })
+}
+
+export async function createWebsiteDataset(input: {
+  name: string
+  url: string
+}): Promise<Dataset> {
+  return createDataset({ name: input.name, type: "website", url: input.url })
+}
+
 export async function createDatasetWithFile(input: {
   name: string
-  type: DatasetType
+  type: "pdf" | "txt" | "md"
   file: File
 }): Promise<Dataset> {
   const presign = await presignUpload({

@@ -1,4 +1,4 @@
-export type DatasetType = "pdf" | "txt" | "md" | "website"
+export type DatasetType = "pdf" | "txt" | "md" | "text" | "website"
 export type DatasetStatus = "pending" | "processing" | "completed" | "failed"
 export type Platform = "telegram" | "discord"
 export type WebhookStatus = "pending" | "active" | "failed"
@@ -55,6 +55,12 @@ export interface Dataset {
   createdAt: string
   updatedAt: string
 }
+
+/** POST /datasets — discriminated by `type`. */
+export type CreateDatasetRequest =
+  | { name: string; type: "pdf" | "txt" | "md"; storageKey: string }
+  | { name: string; type: "text"; content: string }
+  | { name: string; type: "website"; url: string }
 
 export interface Integration {
   _id: string
