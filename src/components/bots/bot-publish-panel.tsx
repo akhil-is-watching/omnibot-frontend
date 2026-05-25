@@ -73,8 +73,10 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Discard draft changes?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This resets draft settings and dataset links to match the last
-                    published version (v{bot.publishedVersion}).
+                    This resets draft settings to match the last published
+                    version (v{bot.publishedVersion}). Datasets added since that
+                    publish will be deleted. Datasets you removed during this
+                    draft are not restored.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -122,7 +124,7 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
               <dt className="text-muted-foreground">Knowledge datasets</dt>
               <dd>
                 {bot.published.datasetIds.length
-                  ? `${bot.published.datasetIds.length} linked`
+                  ? `${bot.published.datasetIds.length} dataset${bot.published.datasetIds.length === 1 ? "" : "s"}`
                   : "None"}
               </dd>
             </div>

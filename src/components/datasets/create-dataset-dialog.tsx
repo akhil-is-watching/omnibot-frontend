@@ -2,9 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
-  createDatasetWithFile,
-  createTextDataset,
-  createWebsiteDataset,
+  createBotDatasetWithFile,
+  createBotTextDataset,
+  createBotWebsiteDataset,
 } from "@/lib/api"
 import {
   formatByteSize,
@@ -37,7 +37,7 @@ function inferTypeFromFile(file: File): "pdf" | "txt" | "md" {
   return "txt"
 }
 
-export function CreateDatasetDialog() {
+export function CreateDatasetDialog({ botId }: { botId: string }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [file, setFile] = useState<File | null>(null)
@@ -55,20 +55,21 @@ export function CreateDatasetDialog() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (mode === "website") {
-        return createWebsiteDataset({ name, url })
+        return createBotWebsiteDataset(botId, { name, url })
       }
       if (mode === "text") {
-        return createTextDataset({ name, content })
+        return createBotTextDataset(botId, { name, content })
       }
       if (!file) throw new Error("Select a file")
-      return createDatasetWithFile({
+      return createBotDatasetWithFile(botId, {
         name,
         type: inferTypeFromFile(file),
         file,
       })
     },
     onSuccess: (dataset) => {
-      queryClient.invalidateQueries({ queryKey: ["datasets"] })
+      queryClient.invalidateQueries({ queryKey: ["bot-datasets", botId] })
+      queryClient.invalidateQueries({ queryKey: ["bot", botId] })
       toast.success(`Dataset "${dataset.name}" created`)
       setOpen(false)
       resetForm()
@@ -108,13 +109,10 @@ export function CreateDatasetDialog() {
         <DialogHeader>
           <DialogTitle>Add dataset</DialogTitle>
           <DialogDescription>
-            Upload a document, paste text, or add a website URL for ingestion.
+            Upload a document, paste text, or add a website URL for this bot.
           </DialogDescription>
         </DialogHeader>
-        <Tabs
-          value={mode}
-          onValueChange={(v) => setMode(v as DatasetMode)}
-        >
+        <Tabs value={mode} onValueChange={(v) => setMode(v as DatasetMode)}>
           <TabsList className="w-full">
             <TabsTrigger value="file" className="flex-1">
               File
@@ -180,11 +178,6 @@ export function CreateDatasetDialog() {
               {contentError && (
                 <p className="text-xs text-destructive">{contentError}</p>
               )}
-              <p className="text-xs text-muted-foreground">
-                Pasted text is sent as JSON (type <code className="text-xs">text</code>
-                ), not as a file upload. Distinct from uploading a{" "}
-                <code className="text-xs">.txt</code> file.
-              </p>
             </TabsContent>
             <TabsContent value="website" className="mt-0 grid gap-2">
               <Label htmlFor="dataset-url">Website URL</Label>
@@ -197,9 +190,7 @@ export function CreateDatasetDialog() {
                 required={mode === "website"}
               />
               <p className="text-xs text-muted-foreground">
-                Ingestion is async and uses Firecrawl on the ingestor service
-                (operators configure FIRECRAWL_API_KEY — not a frontend env).
-                Multiple linked pages are crawled and indexed.
+                Ingestion is async and uses Firecrawl on the ingestor service.
               </p>
             </TabsContent>
             {mutation.error && (

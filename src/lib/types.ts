@@ -44,6 +44,7 @@ export interface UpdateBotRequest {
 export interface Dataset {
   _id: string
   orgId: string
+  botId: string
   name: string
   type: DatasetType
   sourceUrl: string
@@ -52,15 +53,24 @@ export interface Dataset {
   jobId?: string
   errorMessage?: string | null
   chunkCount?: number
+  /** May be returned for `text` datasets when fetching a single record. */
+  content?: string
   createdAt: string
   updatedAt: string
 }
 
-/** POST /api/hub/datasets — discriminated by `type`. */
+/** POST /api/hub/bots/:botId/datasets — discriminated by `type`. */
 export type CreateDatasetRequest =
   | { name: string; type: "pdf" | "txt" | "md"; storageKey: string }
   | { name: string; type: "text"; content: string }
   | { name: string; type: "website"; url: string }
+
+/** PATCH /api/hub/bots/:botId/datasets/:datasetId */
+export interface UpdateDatasetRequest {
+  name?: string
+  /** Text datasets only — replaces content and re-enqueues ingestion */
+  content?: string
+}
 
 export interface Integration {
   _id: string

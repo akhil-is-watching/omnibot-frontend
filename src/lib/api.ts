@@ -16,6 +16,7 @@ import type {
   PresignUploadResponse,
   RegisterRequest,
   UpdateBotRequest,
+  UpdateDatasetRequest,
 } from "@/lib/types"
 import { validateTextDatasetContent } from "@/lib/datasets"
 import {
@@ -176,11 +177,16 @@ export async function getHealthReady(): Promise<HealthReadyResponse> {
 
 // ——— Uploads ———
 
-export async function presignUpload(input: {
-  purpose: "avatar" | "dataset"
-  filename: string
-  contentType: string
-}): Promise<PresignUploadResponse> {
+export async function presignUpload(
+  input:
+    | { purpose: "avatar"; filename: string; contentType: string }
+    | {
+        purpose: "dataset"
+        botId: string
+        filename: string
+        contentType: string
+      },
+): Promise<PresignUploadResponse> {
   const res = await botmanagerFetch("/uploads/presign", {
     method: "POST",
     body: JSON.stringify(input),
@@ -307,93 +313,113 @@ export async function playgroundChat(
   return res.json() as Promise<Record<string, unknown>>
 }
 
-// ——— Datasets ———
+// ——— Bot datasets ———
 
-export async function listDatasets(params?: {
-  limit?: number
-  cursor?: string
-}): Promise<Paginated<Dataset>> {
+export async function listBotDatasets(
+  botId: string,
+  params?: { limit?: number; cursor?: string },
+): Promise<Paginated<Dataset>> {
   const search = new URLSearchParams()
   if (params?.limit) search.set("limit", String(params.limit))
   if (params?.cursor) search.set("cursor", params.cursor)
   const qs = search.toString()
-  const res = await botmanagerFetch(`/datasets${qs ? `?${qs}` : ""}`)
+  const res = await botmanagerFetch(
+    `/bots/${botId}/datasets${qs ? `?${qs}` : ""}`,
+  )
   return res.json() as Promise<Paginated<Dataset>>
 }
 
-export async function getDataset(datasetId: string): Promise<Dataset> {
-  const res = await botmanagerFetch(`/datasets/${datasetId}`)
+export async function getBotDataset(
+  botId: string,
+  datasetId: string,
+): Promise<Dataset> {
+  const res = await botmanagerFetch(`/bots/${botId}/datasets/${datasetId}`)
   return res.json() as Promise<Dataset>
 }
 
-export async function createDataset(input: CreateDatasetRequest): Promise<Dataset> {
-  const res = await botmanagerFetch("/datasets", {
+export async function createBotDataset(
+  botId: string,
+  input: CreateDatasetRequest,
+): Promise<Dataset> {
+  const res = await botmanagerFetch(`/bots/${botId}/datasets`, {
     method: "POST",
     body: JSON.stringify(input),
   })
   return res.json() as Promise<Dataset>
 }
 
-export async function createTextDataset(input: {
-  name: string
-  content: string
-}): Promise<Dataset> {
+export async function createBotTextDataset(
+  botId: string,
+  input: { name: string; content: string },
+): Promise<Dataset> {
   const trimmed = input.content.trim()
   if (!trimmed) {
     throw new ApiError("Content is required", 400)
   }
   const error = validateTextDatasetContent(trimmed)
   if (error) throw new ApiError(error, 400)
-  return createDataset({ name: input.name, type: "text", content: trimmed })
+  return createBotDataset(botId, {
+    name: input.name,
+    type: "text",
+    content: trimmed,
+  })
 }
 
-export async function createWebsiteDataset(input: {
-  name: string
-  url: string
-}): Promise<Dataset> {
-  return createDataset({ name: input.name, type: "website", url: input.url })
+export async function createBotWebsiteDataset(
+  botId: string,
+  input: { name: string; url: string },
+): Promise<Dataset> {
+  return createBotDataset(botId, {
+    name: input.name,
+    type: "website",
+    url: input.url,
+  })
 }
 
-export async function createDatasetWithFile(input: {
-  name: string
-  type: "pdf" | "txt" | "md"
-  file: File
-}): Promise<Dataset> {
+export async function createBotDatasetWithFile(
+  botId: string,
+  input: {
+    name: string
+    type: "pdf" | "txt" | "md"
+    file: File
+  },
+): Promise<Dataset> {
   const presign = await presignUpload({
     purpose: "dataset",
+    botId,
     filename: input.file.name,
     contentType: input.file.type,
   })
   await uploadToPresignedUrl(presign.uploadUrl, input.file)
-  return createDataset({
+  return createBotDataset(botId, {
     name: input.name,
     type: input.type,
     storageKey: presign.key,
   })
 }
 
-export async function deleteDataset(datasetId: string): Promise<void> {
-  await botmanagerFetch(`/datasets/${datasetId}`, { method: "DELETE" })
-}
-
-// ——— Bot ↔ Dataset links ———
-
-export async function listBotDatasets(botId: string): Promise<Dataset[]> {
-  const res = await botmanagerFetch(`/bots/${botId}/datasets`)
-  return res.json() as Promise<Dataset[]>
-}
-
-export async function linkDatasetsToBot(
+export async function updateBotDataset(
   botId: string,
-  datasetIds: string[],
-): Promise<void> {
-  await botmanagerFetch(`/bots/${botId}/datasets`, {
-    method: "POST",
-    body: JSON.stringify({ datasetIds }),
+  datasetId: string,
+  input: UpdateDatasetRequest,
+): Promise<Dataset> {
+  if (input.content !== undefined) {
+    const trimmed = input.content.trim()
+    if (!trimmed) {
+      throw new ApiError("Content is required", 400)
+    }
+    const error = validateTextDatasetContent(trimmed)
+    if (error) throw new ApiError(error, 400)
+    input = { ...input, content: trimmed }
+  }
+  const res = await botmanagerFetch(`/bots/${botId}/datasets/${datasetId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   })
+  return res.json() as Promise<Dataset>
 }
 
-export async function unlinkDatasetFromBot(
+export async function deleteBotDataset(
   botId: string,
   datasetId: string,
 ): Promise<void> {

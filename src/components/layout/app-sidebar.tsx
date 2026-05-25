@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom"
-import { Bot, Database, Settings } from "lucide-react"
+import { Bot, Settings } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -16,7 +16,6 @@ import { getBotmanagerUrl } from "@/lib/api"
 
 const navItems = [
   { to: "/bots", label: "Bots", icon: Bot },
-  { to: "/datasets", label: "Datasets", icon: Database },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 

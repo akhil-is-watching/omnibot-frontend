@@ -1,23 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useMemo, useState } from "react"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query"
+import { useState } from "react"
 import { toast } from "sonner"
-import {
-  linkDatasetsToBot,
-  listBotDatasets,
-  listDatasets,
-  unlinkDatasetFromBot,
-} from "@/lib/api"
+import type { Dataset } from "@/lib/types"
+import { deleteBotDataset, listBotDatasets } from "@/lib/api"
+import { CreateDatasetDialog } from "@/components/datasets/create-dataset-dialog"
+import { EditTextDatasetDialog } from "@/components/datasets/edit-text-dataset-dialog"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -44,138 +36,47 @@ import {
   RelativeTime,
 } from "@/components/shared"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Link2, Unlink } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
-function LinkDatasetsDialog({
-  botId,
-  linkedIds,
-}: {
-  botId: string
-  linkedIds: Set<string>
-}) {
-  const [open, setOpen] = useState(false)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const queryClient = useQueryClient()
-
-  const { data: allDatasets, isLoading } = useQuery({
-    queryKey: ["datasets", "all-for-link"],
-    queryFn: async () => {
-      const page = await listDatasets({ limit: 100 })
-      return page.data
-    },
-    enabled: open,
-  })
-
-  const available = useMemo(
-    () => allDatasets?.filter((d) => !linkedIds.has(d._id)) ?? [],
-    [allDatasets, linkedIds],
-  )
-
-  const mutation = useMutation({
-    mutationFn: () => linkDatasetsToBot(botId, [...selected]),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bot-datasets", botId] })
-      queryClient.invalidateQueries({ queryKey: ["bot", botId] })
-      toast.success("Datasets linked")
-      setOpen(false)
-      setSelected(new Set())
-    },
-    onError: (err: Error) => toast.error(err.message),
-  })
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (!next) setSelected(new Set())
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button>
-          <Link2 />
-          Link datasets
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Link datasets</DialogTitle>
-          <DialogDescription>
-            Select completed datasets to attach as knowledge sources.
-          </DialogDescription>
-        </DialogHeader>
-        {isLoading ? (
-          <Skeleton className="h-32 w-full" />
-        ) : available.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No unlinked datasets available. Create datasets first.
-          </p>
-        ) : (
-          <div className="max-h-64 space-y-2 overflow-y-auto">
-            {available.map((dataset) => (
-              <label
-                key={dataset._id}
-                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
-              >
-                <Checkbox
-                  checked={selected.has(dataset._id)}
-                  onCheckedChange={() => toggle(dataset._id)}
-                  disabled={dataset.status !== "completed"}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{dataset.name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="uppercase">{dataset.type}</span>
-                    <DatasetStatusBadge status={dataset.status} />
-                    {dataset.status !== "completed" && (
-                      <span>Not ready for RAG</span>
-                    )}
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        )}
-        <DialogFooter>
-          <Button
-            disabled={selected.size === 0 || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? "Linking…" : `Link ${selected.size || ""} dataset${selected.size === 1 ? "" : "s"}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
+function isPollingStatus(status: Dataset["status"]) {
+  return status === "pending" || status === "processing"
 }
 
 export function BotDatasetsTab({ botId }: { botId: string }) {
   const queryClient = useQueryClient()
-  const { data, isLoading, error } = useQuery({
+  const [editingDataset, setEditingDataset] = useState<Dataset | null>(null)
+
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["bot-datasets", botId],
-    queryFn: () => listBotDatasets(botId),
+    queryFn: ({ pageParam }) =>
+      listBotDatasets(botId, { limit: 20, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) =>
+      last.hasMore ? (last.nextCursor ?? undefined) : undefined,
+    refetchInterval: (query) => {
+      const datasets = query.state.data?.pages.flatMap((p) => p.data) ?? []
+      return datasets.some((d) => isPollingStatus(d.status)) ? 3000 : false
+    },
   })
 
-  const unlink = useMutation({
-    mutationFn: (datasetId: string) => unlinkDatasetFromBot(botId, datasetId),
+  const remove = useMutation({
+    mutationFn: (datasetId: string) => deleteBotDataset(botId, datasetId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bot-datasets", botId] })
       queryClient.invalidateQueries({ queryKey: ["bot", botId] })
-      toast.success("Dataset unlinked")
+      toast.success("Dataset deleted")
     },
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const linkedIds = useMemo(() => new Set(data?.map((d) => d._id) ?? []), [data])
+  const datasets = data?.pages.flatMap((p) => p.data) ?? []
 
   if (isLoading) {
     return (
@@ -193,73 +94,117 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Draft knowledge links — publish to update what Telegram and Discord use
-        for RAG.
+        Knowledge sources for this bot. Publish to update what Telegram and
+        Discord use for RAG.
       </p>
       <div className="flex justify-end">
-        <LinkDatasetsDialog botId={botId} linkedIds={linkedIds} />
+        <CreateDatasetDialog botId={botId} />
       </div>
-      {!data?.length ? (
+      {datasets.length === 0 ? (
         <EmptyState
-          title="No linked datasets"
-          description="Link knowledge datasets for RAG-powered responses."
+          title="No datasets yet"
+          description="Add documents, pasted text, or website URLs for this bot."
+          action={<CreateDatasetDialog botId={botId} />}
         />
       ) : (
-        <div className="rounded-xl border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Chunks</TableHead>
-                <TableHead>Added</TableHead>
-                <TableHead className="w-[60px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((dataset) => (
-                <TableRow key={dataset._id}>
-                  <TableCell className="font-medium">{dataset.name}</TableCell>
-                  <TableCell className="uppercase">{dataset.type}</TableCell>
-                  <TableCell>
-                    <DatasetStatusBadge status={dataset.status} />
-                  </TableCell>
-                  <TableCell>{dataset.chunkCount ?? "—"}</TableCell>
-                  <TableCell>
-                    <RelativeTime date={dataset.createdAt} />
-                  </TableCell>
-                  <TableCell>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon-sm">
-                          <Unlink className="text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Unlink dataset?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            The bot will no longer use &quot;{dataset.name}&quot; for
-                            RAG context.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => unlink.mutate(dataset._id)}
-                          >
-                            Unlink
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
+        <>
+          <div className="rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Chunks</TableHead>
+                  <TableHead>Added</TableHead>
+                  <TableHead className="w-[88px]" />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {datasets.map((dataset) => (
+                  <TableRow key={dataset._id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{dataset.name}</p>
+                        {dataset.errorMessage && (
+                          <p className="text-xs text-destructive">
+                            {dataset.errorMessage}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="uppercase">{dataset.type}</TableCell>
+                    <TableCell>
+                      <DatasetStatusBadge status={dataset.status} />
+                    </TableCell>
+                    <TableCell>{dataset.chunkCount ?? "—"}</TableCell>
+                    <TableCell>
+                      <RelativeTime date={dataset.createdAt} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        {dataset.type === "text" && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setEditingDataset(dataset)}
+                          >
+                            <Pencil />
+                          </Button>
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon-sm">
+                              <Trash2 className="text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete dataset?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This permanently removes &quot;{dataset.name}&quot;
+                                , its file, and search index from this bot.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => remove.mutate(dataset._id)}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {hasNextPage && (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {editingDataset && (
+        <EditTextDatasetDialog
+          botId={botId}
+          dataset={editingDataset}
+          open={!!editingDataset}
+          onOpenChange={(open) => {
+            if (!open) setEditingDataset(null)
+          }}
+        />
       )}
     </div>
   )
