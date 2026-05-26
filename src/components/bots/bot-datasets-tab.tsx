@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import type { Dataset } from "@/lib/types"
 import { deleteBotDataset, listBotDatasets } from "@/lib/api"
 import { CreateDatasetDialog } from "@/components/datasets/create-dataset-dialog"
-import { EditTextDatasetDialog } from "@/components/datasets/edit-text-dataset-dialog"
+import { EditDatasetDialog } from "@/components/datasets/edit-dataset-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -30,6 +30,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
+  DatasetDraftBadge,
   DatasetStatusBadge,
   EmptyState,
   ErrorMessage,
@@ -94,8 +95,8 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Knowledge sources for this bot. Publish to update what Telegram and
-        Discord use for RAG.
+        Knowledge sources for this bot. New datasets ingest immediately; renames
+        and text edits are staged until you publish.
       </p>
       <div className="flex justify-end">
         <CreateDatasetDialog botId={botId} />
@@ -125,7 +126,10 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
                   <TableRow key={dataset._id}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{dataset.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{dataset.name}</p>
+                          {dataset.hasDraftChanges && <DatasetDraftBadge />}
+                        </div>
                         {dataset.errorMessage && (
                           <p className="text-xs text-destructive">
                             {dataset.errorMessage}
@@ -143,15 +147,13 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        {dataset.type === "text" && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => setEditingDataset(dataset)}
-                          >
-                            <Pencil />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setEditingDataset(dataset)}
+                        >
+                          <Pencil />
+                        </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon-sm">
@@ -197,7 +199,7 @@ export function BotDatasetsTab({ botId }: { botId: string }) {
         </>
       )}
       {editingDataset && (
-        <EditTextDatasetDialog
+        <EditDatasetDialog
           botId={botId}
           dataset={editingDataset}
           open={!!editingDataset}

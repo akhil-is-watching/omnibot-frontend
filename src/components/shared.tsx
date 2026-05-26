@@ -19,6 +19,14 @@ export function DatasetStatusBadge({ status }: { status: DatasetStatus }) {
   return <Badge variant={datasetVariants[status]}>{status}</Badge>
 }
 
+export function DatasetDraftBadge() {
+  return (
+    <Badge variant="secondary" className="font-normal">
+      Draft edit
+    </Badge>
+  )
+}
+
 const webhookVariants: Record<
   WebhookStatus,
   "default" | "secondary" | "destructive" | "outline"

@@ -31,6 +31,7 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
     mutationFn: () => publishBot(bot._id),
     onSuccess: (updated) => {
       refreshBot(updated)
+      queryClient.invalidateQueries({ queryKey: ["bot-datasets", bot._id] })
       toast.success(`Published v${updated.published?.version ?? updated.publishedVersion}`)
     },
     onError: (err: Error) => toast.error(err.message),
@@ -56,8 +57,10 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
             <BotPublishStatusBadge bot={bot} />
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
-            Overview and knowledge edits are <strong>draft</strong> until you publish.
-            Playground tests the draft. Telegram and Discord use the{" "}
+            Bot settings and staged dataset edits are <strong>draft</strong> until
+            you publish. Playground uses draft settings with{" "}
+            <strong>currently indexed</strong> chunks — staged text changes apply
+            after publish and re-ingest. Telegram and Discord use the{" "}
             <strong>live</strong> snapshot only.
           </p>
         </div>
@@ -73,10 +76,11 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Discard draft changes?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This resets draft settings to match the last published
-                    version (v{bot.publishedVersion}). Datasets added since that
-                    publish will be deleted. Datasets you removed during this
-                    draft are not restored.
+                    This resets draft bot settings to match the last published
+                    version (v{bot.publishedVersion}), clears staged dataset
+                    name/text edits (live ingested content stays as published),
+                    and deletes datasets added since that publish. Datasets you
+                    removed during this draft are not restored.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

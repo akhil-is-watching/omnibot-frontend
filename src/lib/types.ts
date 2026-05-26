@@ -45,16 +45,19 @@ export interface Dataset {
   _id: string
   orgId: string
   botId: string
+  /** Effective display name (staged rename returned when present) */
   name: string
   type: DatasetType
   sourceUrl: string
   storageKey?: string
+  /** Present on GET/create/PATCH for `type: "text"` (draft body when staged); omitted from paginated list */
+  content?: string
+  /** True when staged name/content edits are not yet applied via Publish */
+  hasDraftChanges?: boolean
   status: DatasetStatus
   jobId?: string
   errorMessage?: string | null
   chunkCount?: number
-  /** May be returned for `text` datasets when fetching a single record. */
-  content?: string
   createdAt: string
   updatedAt: string
 }
@@ -65,10 +68,10 @@ export type CreateDatasetRequest =
   | { name: string; type: "text"; content: string }
   | { name: string; type: "website"; url: string }
 
-/** PATCH /api/hub/bots/:botId/datasets/:datasetId */
+/** PATCH /api/hub/bots/:botId/datasets/:datasetId — stages edits until Publish */
 export interface UpdateDatasetRequest {
   name?: string
-  /** Text datasets only — replaces content and re-enqueues ingestion */
+  /** Text datasets only — stages content; committed and re-ingested on Publish */
   content?: string
 }
 

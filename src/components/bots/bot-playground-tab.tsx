@@ -41,8 +41,10 @@ export function BotPlaygroundTab({ botId }: { botId: string }) {
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Test the <strong>draft</strong> bot (model, prompt, linked datasets). Uses
-        OpenRouter on Bot Manager — not sent to Telegram or Discord.
+        Test <strong>draft</strong> bot settings (model, prompt, name) with RAG
+        over <strong>currently indexed</strong> chunks. Staged dataset text/name
+        edits do not apply until you publish. Uses OpenRouter on Bot Manager —
+        not sent to Telegram or Discord.
       </p>
 
       <div
