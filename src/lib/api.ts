@@ -112,6 +112,14 @@ export function getBotmanagerUrl(): string {
   return BOTMANAGER_URL
 }
 
+/** OpenAPI Swagger UI for the configured Bot Manager (override with VITE_BOTMANAGER_SWAGGER_URL). */
+export function getSwaggerUrl(): string {
+  const override = import.meta.env.VITE_BOTMANAGER_SWAGGER_URL
+  if (typeof override === "string" && override.trim()) return override.trim()
+  const base = BOTMANAGER_URL.replace(/\/$/, "")
+  return `${base}${hubPath("/swagger")}`
+}
+
 function normalizeAuthResponse(data: Record<string, unknown>): AuthResponse {
   const token = data.accessToken ?? data.access_token
   if (typeof token !== "string" || !token) {

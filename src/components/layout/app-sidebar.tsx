@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom"
-import { Bot, Settings } from "lucide-react"
+import { Bot, ExternalLink, Settings } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -12,7 +12,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { getBotmanagerUrl } from "@/lib/api"
+import { getBotmanagerUrl, getSwaggerUrl } from "@/lib/api"
 
 const navItems = [
   { to: "/bots", label: "Bots", icon: Bot },
@@ -49,10 +49,19 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="space-y-2 border-t border-sidebar-border p-4">
         <p className="truncate text-xs text-muted-foreground">
           API: {getBotmanagerUrl()}
         </p>
+        <a
+          href={getSwaggerUrl()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          API docs
+          <ExternalLink className="size-3" />
+        </a>
       </SidebarFooter>
     </Sidebar>
   )

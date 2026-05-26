@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
-import { LogOut } from "lucide-react"
+import { LogOut, ExternalLink } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { getBotmanagerUrl, getHealth, getHealthReady, getApiPrefix } from "@/lib/api"
+import { getBotmanagerUrl, getHealth, getHealthReady, getApiPrefix, getSwaggerUrl } from "@/lib/api"
 import { emailFromToken, getAccessToken } from "@/lib/auth-storage"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -95,6 +95,18 @@ export function SettingsPage() {
             <div>
               <p className="text-muted-foreground">API prefix</p>
               <code className="text-xs">{apiPrefix}</code>
+            </div>
+            <div>
+              <p className="text-muted-foreground">API docs</p>
+              <a
+                href={getSwaggerUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                {getSwaggerUrl()}
+                <ExternalLink className="size-3" />
+              </a>
             </div>
             <p className="text-xs text-muted-foreground">
               Copy <code>.env.example</code> to <code>.env</code> and set{" "}
