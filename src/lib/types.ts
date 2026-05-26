@@ -142,9 +142,21 @@ export interface HealthReadyResponse {
   checks?: Record<string, { status: string; message?: string }>
 }
 
+export interface DatasetNotReady {
+  datasetId?: string
+  status?: string
+}
+
 export interface ApiErrorBody {
   statusCode?: number
-  message?: string | string[]
+  message?:
+    | string
+    | string[]
+    | {
+        message?: string
+        datasetsNotReady?: DatasetNotReady[]
+      }
+  datasetsNotReady?: DatasetNotReady[]
 }
 
 export interface AuthUser {

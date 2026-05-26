@@ -87,7 +87,9 @@ export function EditDatasetDialog({
       queryClient.invalidateQueries({ queryKey: ["bot-datasets", botId] })
       queryClient.invalidateQueries({ queryKey: ["bot-dataset", botId, dataset._id] })
       queryClient.invalidateQueries({ queryKey: ["bot", botId] })
-      toast.success(`"${updated.name}" staged — publish the bot to apply`)
+      toast.success(
+        `"${updated.name}" staged — publish to apply (text may need two publish steps)`,
+      )
       onOpenChange(false)
     },
   })

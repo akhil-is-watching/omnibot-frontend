@@ -59,17 +59,24 @@ export function clearAccessToken(): void {
 
 export class ApiError extends Error {
   status: number
+  body: ApiErrorBody & Record<string, unknown>
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, body: ApiErrorBody = {}) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.body = body as ApiErrorBody & Record<string, unknown>
   }
 }
 
 function formatErrorMessage(body: ApiErrorBody, status: number): string {
-  if (Array.isArray(body.message)) return body.message.join(", ")
-  if (typeof body.message === "string") return body.message
+  const msg = body.message
+  if (Array.isArray(msg)) return msg.join(", ")
+  if (typeof msg === "string") return msg
+  if (msg && typeof msg === "object" && "message" in msg) {
+    const nested = msg.message
+    if (typeof nested === "string") return nested
+  }
   return `HTTP ${status}`
 }
 
@@ -96,7 +103,7 @@ export async function botmanagerFetch(
       clearAccessToken()
       onUnauthorized?.()
     }
-    throw new ApiError(formatErrorMessage(body, res.status), res.status)
+    throw new ApiError(formatErrorMessage(body, res.status), res.status, body)
   }
   return res
 }
@@ -135,7 +142,7 @@ async function publicJsonFetch<T>(
   })
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as ApiErrorBody
-    throw new ApiError(formatErrorMessage(body, res.status), res.status)
+    throw new ApiError(formatErrorMessage(body, res.status), res.status, body)
   }
   return res.json() as Promise<T>
 }

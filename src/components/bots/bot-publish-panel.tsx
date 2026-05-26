@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
 import { toast } from "sonner"
-import type { Bot } from "@/lib/types"
+import type { Bot, DatasetNotReady } from "@/lib/types"
 import { discardBotDraft, publishBot } from "@/lib/api"
 import { isBotPublished } from "@/lib/bot"
 import { getModelLabel } from "@/lib/models"
+import { getPublishNotReadyDatasets } from "@/lib/publish"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -18,28 +20,71 @@ import {
 } from "@/components/ui/alert-dialog"
 import { BotPublishStatusBadge, ErrorMessage, RelativeTime } from "@/components/shared"
 
+function IngestPendingNotice({ datasets }: { datasets: DatasetNotReady[] }) {
+  return (
+    <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm">
+      <p className="font-medium">Ingestion in progress — publish again when ready</p>
+      <p className="mt-1 text-muted-foreground">
+        Your staged edits were applied and re-ingestion started. This is expected
+        after text changes: publish once more after all datasets show status{" "}
+        <strong>completed</strong> on the Knowledge tab.
+      </p>
+      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+        {datasets.map((d) => (
+          <li key={d.datasetId ?? `${d.status}-unknown`}>
+            {d.datasetId ? `Dataset ${d.datasetId}` : "Dataset"}:{" "}
+            <span className="font-medium text-foreground">{d.status ?? "unknown"}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function BotPublishPanel({ bot }: { bot: Bot }) {
   const queryClient = useQueryClient()
   const published = isBotPublished(bot)
+  const [ingestPending, setIngestPending] = useState<DatasetNotReady[] | null>(
+    null,
+  )
 
   function refreshBot(updated: Bot) {
     queryClient.setQueryData(["bot", bot._id], updated)
     queryClient.invalidateQueries({ queryKey: ["bots"] })
   }
 
+  function refreshAfterPartialPublish() {
+    queryClient.invalidateQueries({ queryKey: ["bot-datasets", bot._id] })
+    queryClient.invalidateQueries({ queryKey: ["bot", bot._id] })
+  }
+
   const publish = useMutation({
     mutationFn: () => publishBot(bot._id),
     onSuccess: (updated) => {
+      setIngestPending(null)
       refreshBot(updated)
       queryClient.invalidateQueries({ queryKey: ["bot-datasets", bot._id] })
       toast.success(`Published v${updated.published?.version ?? updated.publishedVersion}`)
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      const notReady = getPublishNotReadyDatasets(err)
+      if (notReady) {
+        setIngestPending(notReady)
+        refreshAfterPartialPublish()
+        toast.info(
+          "Staged edits applied — waiting for ingestion. Publish again when datasets are completed.",
+        )
+        return
+      }
+      setIngestPending(null)
+      toast.error(err.message)
+    },
   })
 
   const discard = useMutation({
     mutationFn: () => discardBotDraft(bot._id),
     onSuccess: (updated) => {
+      setIngestPending(null)
       refreshBot(updated)
       queryClient.invalidateQueries({ queryKey: ["bot-datasets", bot._id] })
       toast.success("Draft reset to live configuration")
@@ -47,7 +92,7 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const canPublish = !published || bot.hasUnpublishedChanges
+  const canPublish = !published || bot.hasUnpublishedChanges || !!ingestPending
 
   return (
     <div className="space-y-4 rounded-xl border p-4">
@@ -59,9 +104,11 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
           <p className="max-w-xl text-sm text-muted-foreground">
             Bot settings and staged dataset edits are <strong>draft</strong> until
             you publish. Playground uses draft settings with{" "}
-            <strong>currently indexed</strong> chunks — staged text changes apply
-            after publish and re-ingest. Telegram and Discord use the{" "}
-            <strong>live</strong> snapshot only.
+            <strong>currently indexed</strong> chunks. Text edits often need{" "}
+            <strong>two publishes</strong>: first applies drafts and starts
+            re-ingest (may show ingestion pending), second freezes live config
+            once all datasets are <strong>completed</strong>. Telegram and Discord
+            use the live snapshot only.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -96,16 +143,23 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
             onClick={() => publish.mutate()}
             disabled={!canPublish || publish.isPending}
           >
-            {publish.isPending ? "Publishing…" : published ? "Publish changes" : "Publish bot"}
+            {publish.isPending
+              ? "Publishing…"
+              : ingestPending
+                ? "Publish again"
+                : published
+                  ? "Publish changes"
+                  : "Publish bot"}
           </Button>
         </div>
       </div>
 
-      {(publish.error || discard.error) && (
-        <ErrorMessage
-          message={((publish.error ?? discard.error) as Error).message}
-        />
+      {ingestPending && <IngestPendingNotice datasets={ingestPending} />}
+
+      {publish.error && !ingestPending && (
+        <ErrorMessage message={(publish.error as Error).message} />
       )}
+      {discard.error && <ErrorMessage message={(discard.error as Error).message} />}
 
       {bot.published && (
         <div className="border-t pt-4">
