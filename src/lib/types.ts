@@ -179,6 +179,15 @@ export interface PlaygroundChatResponse {
   }
 }
 
+export interface ExecuteActionRequest {
+  query: string
+}
+
+export interface ExecuteActionResponse {
+  eventId: string
+  status: "queued"
+}
+
 export interface HealthResponse {
   status: string
   service: string

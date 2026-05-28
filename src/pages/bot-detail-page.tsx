@@ -7,6 +7,7 @@ import { isBotPublished } from "@/lib/bot"
 import { BotDatasetsTab } from "@/components/bots/bot-datasets-tab"
 import { BotIntegrationsTab } from "@/components/bots/bot-integrations-tab"
 import { BotOverviewTab } from "@/components/bots/bot-overview-tab"
+import { BotExecuteActionTab } from "@/components/bots/bot-execute-action-tab"
 import { BotPlaygroundTab } from "@/components/bots/bot-playground-tab"
 import { BotPublishPanel } from "@/components/bots/bot-publish-panel"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -52,6 +53,8 @@ export function BotDetailPage() {
       </div>
     )
   }
+
+  const showExecuteAction = isSecretaryBot(bot)
 
   return (
     <div className="space-y-6">
@@ -108,6 +111,9 @@ export function BotDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
           <TabsTrigger value="playground">Playground</TabsTrigger>
+          {showExecuteAction && (
+            <TabsTrigger value="execute-action">Live action</TabsTrigger>
+          )}
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="mt-4">
@@ -119,6 +125,11 @@ export function BotDetailPage() {
         <TabsContent value="playground" className="mt-4">
           <BotPlaygroundTab botId={bot._id} />
         </TabsContent>
+        {showExecuteAction && (
+          <TabsContent value="execute-action" className="mt-4">
+            <BotExecuteActionTab bot={bot} />
+          </TabsContent>
+        )}
         <TabsContent value="integrations" className="mt-4">
           <BotIntegrationsTab bot={bot} />
         </TabsContent>

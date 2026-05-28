@@ -16,6 +16,7 @@ import type {
   LoginRequest,
   Paginated,
   PlaygroundChatResponse,
+  ExecuteActionResponse,
   PresignUploadResponse,
   RegisterRequest,
   UpdateBotRequest,
@@ -365,6 +366,19 @@ export async function playgroundChat(
     {
       method: "POST",
       body: JSON.stringify({ message }),
+    },
+  )
+}
+
+export async function executeAction(
+  botId: string,
+  query: string,
+): Promise<ExecuteActionResponse> {
+  return botmanagerJsonFetch<ExecuteActionResponse>(
+    `/bots/${botId}/execute-action`,
+    {
+      method: "POST",
+      body: JSON.stringify({ query }),
     },
   )
 }
