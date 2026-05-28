@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
 import { getBot } from "@/lib/api"
 import { getModelLabel } from "@/lib/models"
+import { isSecretaryBot } from "@/lib/bot-types"
+import { isBotPublished } from "@/lib/bot"
 import { BotDatasetsTab } from "@/components/bots/bot-datasets-tab"
 import { BotIntegrationsTab } from "@/components/bots/bot-integrations-tab"
 import { BotOverviewTab } from "@/components/bots/bot-overview-tab"
@@ -21,6 +23,11 @@ export function BotDetailPage() {
     queryKey: ["bot", botId],
     queryFn: () => getBot(botId!),
     enabled: !!botId,
+    refetchInterval: (query) => {
+      const b = query.state.data
+      if (!b || !isSecretaryBot(b) || isBotPublished(b)) return false
+      return 10000
+    },
   })
 
   if (isLoading) {

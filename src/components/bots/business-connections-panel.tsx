@@ -1,6 +1,8 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
 import { listBusinessConnections } from "@/lib/api"
 import type { Integration } from "@/lib/types"
+import { countActiveBusinessConnections } from "@/lib/bot-types"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -20,6 +22,7 @@ export function BusinessConnectionsPanel({
   botId: string
   integration: Integration
 }) {
+  const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ["business-connections", botId, integration._id],
     queryFn: () => listBusinessConnections(botId, integration._id),
@@ -27,12 +30,18 @@ export function BusinessConnectionsPanel({
     enabled: integration.platform === "telegram",
   })
 
+  useEffect(() => {
+    if (!data) return
+    queryClient.invalidateQueries({ queryKey: ["bot", botId] })
+    queryClient.invalidateQueries({ queryKey: ["integrations", botId] })
+  }, [data, botId, queryClient])
+
   if (integration.platform !== "telegram") return null
 
-  const active =
-    integration.activeBusinessConnections ??
-    data?.filter((c) => c.isEnabled && c.canReply).length ??
-    0
+  const active = Math.max(
+    integration.activeBusinessConnections ?? 0,
+    countActiveBusinessConnections(data),
+  )
 
   return (
     <div className="space-y-3 rounded-xl border p-4">

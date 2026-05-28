@@ -1,10 +1,15 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
 import type { Bot, DatasetNotReady } from "@/lib/types"
-import { discardBotDraft, publishBot } from "@/lib/api"
+import { discardBotDraft, listIntegrations, publishBot } from "@/lib/api"
 import { isBotPublished } from "@/lib/bot"
-import { botTypeLabel, isSecretaryPublishBlocked } from "@/lib/bot-types"
+import {
+  botTypeLabel,
+  isSecretaryBot,
+  isSecretaryPublishBlocked,
+  resolveSecretaryActiveConnections,
+} from "@/lib/bot-types"
 import { getModelLabel } from "@/lib/models"
 import { getPublishNotReadyDatasets } from "@/lib/publish"
 import { Button } from "@/components/ui/button"
@@ -47,6 +52,22 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
   const published = isBotPublished(bot)
   const [ingestPending, setIngestPending] = useState<DatasetNotReady[] | null>(
     null,
+  )
+
+  const secretary = isSecretaryBot(bot)
+  const { data: integrations } = useQuery({
+    queryKey: ["integrations", bot._id],
+    queryFn: () => listIntegrations(bot._id),
+    enabled: secretary,
+    refetchInterval: secretary && !published ? 10000 : false,
+  })
+
+  const activeBusinessConnections = resolveSecretaryActiveConnections(bot, {
+    integrations,
+  })
+  const secretaryBlocked = isSecretaryPublishBlocked(
+    bot,
+    activeBusinessConnections,
   )
 
   function refreshBot(updated: Bot) {
@@ -93,7 +114,6 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const secretaryBlocked = isSecretaryPublishBlocked(bot)
   const canPublish =
     (!published || bot.hasUnpublishedChanges || !!ingestPending) &&
     !secretaryBlocked
@@ -103,7 +123,10 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
-            <BotPublishStatusBadge bot={bot} />
+            <BotPublishStatusBadge
+              bot={bot}
+              activeBusinessConnections={activeBusinessConnections}
+            />
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
             Bot settings and staged dataset edits are <strong>draft</strong> until
@@ -172,10 +195,9 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
           <p className="mt-1 text-muted-foreground">
             Connect Telegram on the Integrations tab, enable Secretary Mode in
             @BotFather, then have the owner link this bot in Telegram Business
-            settings. Publish unlocks when{" "}
-            <code className="text-xs">secretaryPublishReady</code> is true (
-            {bot.activeBusinessConnections ?? 0} active connection
-            {(bot.activeBusinessConnections ?? 0) === 1 ? "" : "s"}).
+            settings. Publish unlocks when at least one Business connection is
+            active and can reply ({activeBusinessConnections} active connection
+            {activeBusinessConnections === 1 ? "" : "s"}).
           </p>
         </div>
       )}
