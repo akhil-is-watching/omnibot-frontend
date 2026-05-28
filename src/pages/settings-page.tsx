@@ -120,7 +120,8 @@ export function SettingsPage() {
             <div>
               <CardTitle>Backend health</CardTitle>
               <CardDescription>
-                GET {apiPrefix}/health must return service &quot;botmanager&quot;
+                GET {apiPrefix}/health →{" "}
+                <code className="text-xs">data.service === &quot;botmanager&quot;</code>
               </CardDescription>
             </div>
             <button

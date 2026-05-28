@@ -1,4 +1,5 @@
 import type {
+  ApiEnvelope,
   ApiErrorBody,
   AuthResponse,
   AuthUser,
@@ -13,6 +14,7 @@ import type {
   Integration,
   LoginRequest,
   Paginated,
+  PlaygroundChatResponse,
   PresignUploadResponse,
   RegisterRequest,
   UpdateBotRequest,
@@ -69,9 +71,19 @@ export class ApiError extends Error {
   }
 }
 
+function isApiEnvelope(body: unknown): body is ApiEnvelope<unknown> {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "success" in body &&
+    "data" in body
+  )
+}
+
 function formatErrorMessage(body: ApiErrorBody, status: number): string {
+  if (typeof body.error === "string" && body.error.trim()) return body.error
   const msg = body.message
-  if (Array.isArray(msg)) return msg.join(", ")
+  if (Array.isArray(msg)) return msg.join("; ")
   if (typeof msg === "string") return msg
   if (msg && typeof msg === "object" && "message" in msg) {
     const nested = msg.message
@@ -80,10 +92,46 @@ function formatErrorMessage(body: ApiErrorBody, status: number): string {
   return `HTTP ${status}`
 }
 
-export async function botmanagerFetch(
+function throwApiError(
+  body: ApiErrorBody,
+  status: number,
+  token: string | null | undefined,
+): never {
+  if (status === 401 && token) {
+    clearAccessToken()
+    onUnauthorized?.()
+  }
+  throw new ApiError(formatErrorMessage(body, status), status, body)
+}
+
+async function parseEnvelopeResponse<T>(
+  res: Response,
+  options?: { allowFailureData?: boolean },
+): Promise<T> {
+  const body = (await res.json().catch(() => ({}))) as ApiEnvelope<T> &
+    ApiErrorBody
+  const token = accessToken ?? getAccessToken()
+
+  if (isApiEnvelope(body)) {
+    if (!res.ok || body.success === false) {
+      if (options?.allowFailureData && body.data != null) {
+        return body.data as T
+      }
+      throwApiError(body, res.status, token)
+    }
+    return body.data as T
+  }
+
+  if (!res.ok) {
+    throwApiError(body, res.status, token)
+  }
+  return body as T
+}
+
+async function botmanagerJsonFetch<T>(
   path: string,
   init: RequestInit = {},
-): Promise<Response> {
+): Promise<T> {
   const headers = new Headers(init.headers)
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
@@ -97,15 +145,7 @@ export async function botmanagerFetch(
     credentials: "include",
   })
 
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as ApiErrorBody
-    if (res.status === 401 && token) {
-      clearAccessToken()
-      onUnauthorized?.()
-    }
-    throw new ApiError(formatErrorMessage(body, res.status), res.status, body)
-  }
-  return res
+  return parseEnvelopeResponse<T>(res)
 }
 
 export function getBotmanagerUrl(): string {
@@ -148,11 +188,7 @@ async function publicJsonFetch<T>(
     headers,
     credentials: "include",
   })
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as ApiErrorBody
-    throw new ApiError(formatErrorMessage(body, res.status), res.status, body)
-  }
-  return res.json() as Promise<T>
+  return parseEnvelopeResponse<T>(res)
 }
 
 // ——— Auth ———
@@ -166,10 +202,13 @@ export async function login(input: LoginRequest): Promise<AuthResponse> {
 }
 
 export async function register(input: RegisterRequest): Promise<AuthResponse> {
-  const data = await publicJsonFetch<Record<string, unknown>>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify(input),
-  })
+  const data = await publicJsonFetch<Record<string, unknown>>(
+    "/auth/register",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  )
   return normalizeAuthResponse(data)
 }
 
@@ -182,12 +221,14 @@ export function applyAuthSession(response: AuthResponse): void {
 
 export async function getHealth(): Promise<HealthResponse> {
   const res = await fetch(`${BOTMANAGER_URL}${hubPath("/health")}`)
-  return res.json() as Promise<HealthResponse>
+  return parseEnvelopeResponse<HealthResponse>(res)
 }
 
 export async function getHealthReady(): Promise<HealthReadyResponse> {
   const res = await fetch(`${BOTMANAGER_URL}${hubPath("/health/ready")}`)
-  return res.json() as Promise<HealthReadyResponse>
+  return parseEnvelopeResponse<HealthReadyResponse>(res, {
+    allowFailureData: true,
+  })
 }
 
 // ——— Uploads ———
@@ -202,11 +243,10 @@ export async function presignUpload(
         contentType: string
       },
 ): Promise<PresignUploadResponse> {
-  const res = await botmanagerFetch("/uploads/presign", {
+  return botmanagerJsonFetch<PresignUploadResponse>("/uploads/presign", {
     method: "POST",
     body: JSON.stringify(input),
   })
-  return res.json() as Promise<PresignUploadResponse>
 }
 
 export async function uploadToPresignedUrl(
@@ -231,13 +271,11 @@ export async function listBots(params?: {
   if (params?.limit) search.set("limit", String(params.limit))
   if (params?.cursor) search.set("cursor", params.cursor)
   const qs = search.toString()
-  const res = await botmanagerFetch(`/bots${qs ? `?${qs}` : ""}`)
-  return res.json() as Promise<Paginated<Bot>>
+  return botmanagerJsonFetch<Paginated<Bot>>(`/bots${qs ? `?${qs}` : ""}`)
 }
 
 export async function getBot(botId: string): Promise<Bot> {
-  const res = await botmanagerFetch(`/bots/${botId}`)
-  return res.json() as Promise<Bot>
+  return botmanagerJsonFetch<Bot>(`/bots/${botId}`)
 }
 
 export async function createBot(input: {
@@ -247,11 +285,10 @@ export async function createBot(input: {
   systemPrompt?: string
   avatarKey?: string
 }): Promise<Bot> {
-  const res = await botmanagerFetch("/bots", {
+  return botmanagerJsonFetch<Bot>("/bots", {
     method: "POST",
     body: JSON.stringify(input),
   })
-  return res.json() as Promise<Bot>
 }
 
 export async function createBotWithAvatar(input: {
@@ -280,11 +317,10 @@ export async function updateBot(
   botId: string,
   input: UpdateBotRequest,
 ): Promise<Bot> {
-  const res = await botmanagerFetch(`/bots/${botId}`, {
+  return botmanagerJsonFetch<Bot>(`/bots/${botId}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   })
-  return res.json() as Promise<Bot>
 }
 
 export async function updateBotWithAvatar(
@@ -302,30 +338,30 @@ export async function updateBotWithAvatar(
 }
 
 export async function deleteBot(botId: string): Promise<void> {
-  await botmanagerFetch(`/bots/${botId}`, { method: "DELETE" })
+  await botmanagerJsonFetch(`/bots/${botId}`, { method: "DELETE" })
 }
 
 export async function publishBot(botId: string): Promise<Bot> {
-  const res = await botmanagerFetch(`/bots/${botId}/publish`, { method: "POST" })
-  return res.json() as Promise<Bot>
+  return botmanagerJsonFetch<Bot>(`/bots/${botId}/publish`, { method: "POST" })
 }
 
 export async function discardBotDraft(botId: string): Promise<Bot> {
-  const res = await botmanagerFetch(`/bots/${botId}/discard-draft`, {
+  return botmanagerJsonFetch<Bot>(`/bots/${botId}/discard-draft`, {
     method: "POST",
   })
-  return res.json() as Promise<Bot>
 }
 
 export async function playgroundChat(
   botId: string,
   message: string,
-): Promise<Record<string, unknown>> {
-  const res = await botmanagerFetch(`/bots/${botId}/playground/chat`, {
-    method: "POST",
-    body: JSON.stringify({ message }),
-  })
-  return res.json() as Promise<Record<string, unknown>>
+): Promise<PlaygroundChatResponse> {
+  return botmanagerJsonFetch<PlaygroundChatResponse>(
+    `/bots/${botId}/playground/chat`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    },
+  )
 }
 
 // ——— Bot datasets ———
@@ -338,29 +374,26 @@ export async function listBotDatasets(
   if (params?.limit) search.set("limit", String(params.limit))
   if (params?.cursor) search.set("cursor", params.cursor)
   const qs = search.toString()
-  const res = await botmanagerFetch(
+  return botmanagerJsonFetch<Paginated<Dataset>>(
     `/bots/${botId}/datasets${qs ? `?${qs}` : ""}`,
   )
-  return res.json() as Promise<Paginated<Dataset>>
 }
 
 export async function getBotDataset(
   botId: string,
   datasetId: string,
 ): Promise<Dataset> {
-  const res = await botmanagerFetch(`/bots/${botId}/datasets/${datasetId}`)
-  return res.json() as Promise<Dataset>
+  return botmanagerJsonFetch<Dataset>(`/bots/${botId}/datasets/${datasetId}`)
 }
 
 export async function createBotDataset(
   botId: string,
   input: CreateDatasetRequest,
 ): Promise<Dataset> {
-  const res = await botmanagerFetch(`/bots/${botId}/datasets`, {
+  return botmanagerJsonFetch<Dataset>(`/bots/${botId}/datasets`, {
     method: "POST",
     body: JSON.stringify(input),
   })
-  return res.json() as Promise<Dataset>
 }
 
 export async function createBotTextDataset(
@@ -427,18 +460,17 @@ export async function updateBotDataset(
     if (error) throw new ApiError(error, 400)
     input = { ...input, content: trimmed }
   }
-  const res = await botmanagerFetch(`/bots/${botId}/datasets/${datasetId}`, {
+  return botmanagerJsonFetch<Dataset>(`/bots/${botId}/datasets/${datasetId}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   })
-  return res.json() as Promise<Dataset>
 }
 
 export async function deleteBotDataset(
   botId: string,
   datasetId: string,
 ): Promise<void> {
-  await botmanagerFetch(`/bots/${botId}/datasets/${datasetId}`, {
+  await botmanagerJsonFetch(`/bots/${botId}/datasets/${datasetId}`, {
     method: "DELETE",
   })
 }
@@ -464,8 +496,7 @@ export function buildDiscordIntegrationBody(input: {
 }
 
 export async function listIntegrations(botId: string): Promise<Integration[]> {
-  const res = await botmanagerFetch(`/bots/${botId}/integrations`)
-  return res.json() as Promise<Integration[]>
+  return botmanagerJsonFetch<Integration[]>(`/bots/${botId}/integrations`)
 }
 
 export async function createIntegration(
@@ -482,29 +513,30 @@ export async function createIntegration(
         })
       : { platform: "telegram", botToken: input.botToken.trim() }
 
-  const res = await botmanagerFetch(`/bots/${botId}/integrations`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  })
-  return res.json() as Promise<CreateIntegrationResponse>
+  return botmanagerJsonFetch<CreateIntegrationResponse>(
+    `/bots/${botId}/integrations`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+  )
 }
 
 export async function reregisterWebhook(
   botId: string,
   integrationId: string,
 ): Promise<Integration> {
-  const res = await botmanagerFetch(
+  return botmanagerJsonFetch<Integration>(
     `/bots/${botId}/integrations/${integrationId}/webhook`,
     { method: "POST" },
   )
-  return res.json() as Promise<Integration>
 }
 
 export async function deleteIntegration(
   botId: string,
   integrationId: string,
 ): Promise<void> {
-  await botmanagerFetch(`/bots/${botId}/integrations/${integrationId}`, {
+  await botmanagerJsonFetch(`/bots/${botId}/integrations/${integrationId}`, {
     method: "DELETE",
   })
 }

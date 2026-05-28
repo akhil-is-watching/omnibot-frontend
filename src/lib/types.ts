@@ -3,7 +3,14 @@ export type DatasetStatus = "pending" | "processing" | "completed" | "failed"
 export type Platform = "telegram" | "discord"
 export type WebhookStatus = "pending" | "active" | "failed"
 
-export interface BotPublishedSnapshot {
+/** Standard Bot Manager JSON envelope (except GET /api/hub/metrics). */
+export interface ApiEnvelope<T = Record<string, unknown>> {
+  success: boolean
+  data: T
+  error: string
+}
+
+export interface PublishedBotSnapshot {
   version: number
   publishedAt: string
   name: string
@@ -24,9 +31,9 @@ export interface Bot {
   systemPrompt?: string
   avatarUrl?: string
   avatarKey?: string
-  published?: BotPublishedSnapshot
+  published?: PublishedBotSnapshot
   hasUnpublishedChanges?: boolean
-  publishedVersion?: number
+  publishedVersion?: number | null
   draftLinkedDatasetIds?: string[]
   createdAt: string
   updatedAt: string
@@ -132,6 +139,24 @@ export interface PresignUploadResponse {
   expiresInSeconds: number
 }
 
+export interface DeletedResponse {
+  deleted: true
+}
+
+export interface PlaygroundChatResponse {
+  reply: string
+  rag: {
+    chunkCount: number
+    topScore: number
+    hasViableContext: boolean
+    chunks: Array<{
+      datasetId: string
+      score: number
+      textPreview: string
+    }>
+  }
+}
+
 export interface HealthResponse {
   status: string
   service: string
@@ -148,6 +173,10 @@ export interface DatasetNotReady {
 }
 
 export interface ApiErrorBody {
+  success?: boolean
+  error?: string
+  data?: Record<string, unknown> & { datasetsNotReady?: DatasetNotReady[] }
+  /** Legacy NestJS-style errors */
   statusCode?: number
   message?:
     | string
@@ -161,7 +190,8 @@ export interface ApiErrorBody {
 
 export interface AuthUser {
   id?: string
-  email?: string
+  email: string
+  orgId?: string
   name?: string
 }
 
