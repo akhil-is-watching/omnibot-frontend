@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
-import type { CreateIntegrationResponse, Platform } from "@/lib/types"
+import type { Bot, CreateIntegrationResponse, Platform } from "@/lib/types"
 import {
   buildDiscordIntegrationBody,
   createIntegration,
@@ -9,6 +9,12 @@ import {
   listIntegrations,
   reregisterWebhook,
 } from "@/lib/api"
+import {
+  canConnectIntegrations,
+  isSecretaryBot,
+  requiresPublishBeforeConnect,
+} from "@/lib/bot-types"
+import { isBotPublished } from "@/lib/bot"
 import {
   DEFAULT_DISCORD_COMMAND,
   formatDiscordCommand,
@@ -60,6 +66,8 @@ import {
 } from "@/components/shared"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ExternalLink, RefreshCw, Trash2 } from "lucide-react"
+import { BusinessConnectionsPanel } from "@/components/bots/business-connections-panel"
+import { BotTypeBadge } from "@/components/shared"
 
 type SuccessState = CreateIntegrationResponse & {
   usedGuildId: boolean
@@ -68,12 +76,13 @@ type SuccessState = CreateIntegrationResponse & {
 const DISCORD_COMMAND_PATTERN = /^[\w-]{1,32}$/
 
 function ConnectIntegrationDialog({
-  botId,
+  bot,
   disabled,
 }: {
-  botId: string
+  bot: Bot
   disabled?: boolean
 }) {
+  const botId = bot._id
   const [open, setOpen] = useState(false)
   const [platform, setPlatform] = useState<Platform>("telegram")
   const [botToken, setBotToken] = useState("")
@@ -101,6 +110,7 @@ function ConnectIntegrationDialog({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["integrations", botId] })
+      queryClient.invalidateQueries({ queryKey: ["bot", botId] })
       setSuccess({
         ...data,
         usedGuildId: !!discordGuildId.trim(),
@@ -189,6 +199,23 @@ function ConnectIntegrationDialog({
                     name.
                   </p>
                 )}
+              </div>
+            )}
+
+            {success.platform === "telegram" && isSecretaryBot(bot) && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-muted-foreground">
+                <p className="font-medium text-foreground">Secretary next steps</p>
+                <ol className="list-decimal space-y-1 pl-4 text-xs">
+                  <li>Enable Secretary Mode in @BotFather for this bot.</li>
+                  <li>
+                    Owner links the bot in Telegram → Settings → Telegram Business
+                    → Chatbots.
+                  </li>
+                  <li>
+                    Wait for an active Business connection, then publish from the
+                    bot detail page.
+                  </li>
+                </ol>
               </div>
             )}
 
@@ -343,6 +370,25 @@ function ConnectIntegrationDialog({
                 </div>
               </>
             )}
+            {platform === "telegram" && isSecretaryBot(bot) && (
+              <p className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                Secretary bots can connect Telegram before first publish. Enable
+                Secretary Mode in @BotFather, then have the business owner link the
+                bot in Telegram Business settings.
+              </p>
+            )}
+            {platform === "discord" && !isBotPublished(bot) && (
+              <p className="text-xs text-destructive">
+                Discord requires the bot to be published first.
+              </p>
+            )}
+            {platform === "telegram" &&
+              !isSecretaryBot(bot) &&
+              !isBotPublished(bot) && (
+                <p className="text-xs text-destructive">
+                  Moderator Telegram requires the bot to be published first.
+                </p>
+              )}
             {mutation.error && (
               <ErrorMessage message={(mutation.error as Error).message} />
             )}
@@ -352,7 +398,8 @@ function ConnectIntegrationDialog({
                 disabled={
                   !botToken.trim() ||
                   mutation.isPending ||
-                  (platform === "discord" && !discordPublicKey.trim())
+                  (platform === "discord" && !discordPublicKey.trim()) ||
+                  requiresPublishBeforeConnect(bot, platform)
                 }
               >
                 {mutation.isPending ? "Connecting…" : "Connect"}
@@ -365,13 +412,8 @@ function ConnectIntegrationDialog({
   )
 }
 
-export function BotIntegrationsTab({
-  botId,
-  isPublished,
-}: {
-  botId: string
-  isPublished: boolean
-}) {
+export function BotIntegrationsTab({ bot }: { bot: Bot }) {
+  const botId = bot._id
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ["integrations", botId],
@@ -382,6 +424,7 @@ export function BotIntegrationsTab({
     mutationFn: (integrationId: string) => reregisterWebhook(botId, integrationId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integrations", botId] })
+      queryClient.invalidateQueries({ queryKey: ["bot", botId] })
       toast.success("Webhook re-registered")
     },
     onError: (err: Error) => toast.error(err.message),
@@ -411,17 +454,30 @@ export function BotIntegrationsTab({
 
   return (
     <div className="space-y-4">
-      {!isPublished && (
+      {!canConnectIntegrations(bot) && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <p className="font-medium">Publish required</p>
           <p className="mt-1 text-muted-foreground">
-            Connect Telegram or Discord after the bot has been published at least
-            once. Use the publish panel above, then return here.
+            Connect Telegram (moderator) or Discord after the bot has been published
+            at least once. Secretary Telegram bots may connect before publish — see
+            below.
+          </p>
+        </div>
+      )}
+      {isSecretaryBot(bot) && !isBotPublished(bot) && (
+        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm">
+          <p className="font-medium">Secretary setup order</p>
+          <p className="mt-1 text-muted-foreground">
+            Finish datasets → connect Telegram → owner links in Telegram Business →
+            publish when ready.
           </p>
         </div>
       )}
       <div className="flex justify-end">
-        <ConnectIntegrationDialog botId={botId} disabled={!isPublished} />
+        <ConnectIntegrationDialog
+          bot={bot}
+          disabled={!canConnectIntegrations(bot)}
+        />
       </div>
       {!data?.length ? (
         <EmptyState
@@ -449,6 +505,7 @@ export function BotIntegrationsTab({
                 <TableRow>
                   <TableHead>Platform</TableHead>
                   <TableHead>Username</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Webhook</TableHead>
                   <TableHead>Token</TableHead>
                   <TableHead>Connected</TableHead>
@@ -471,6 +528,19 @@ export function BotIntegrationsTab({
                             </p>
                           )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <BotTypeBadge botType={integration.botType} />
+                      {integration.platform === "telegram" &&
+                        integration.botType === "secretary" && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {integration.activeBusinessConnections ?? 0} active Business
+                            link
+                            {(integration.activeBusinessConnections ?? 0) === 1
+                              ? ""
+                              : "s"}
+                          </p>
+                        )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
@@ -535,6 +605,19 @@ export function BotIntegrationsTab({
               </TableBody>
             </Table>
           </div>
+          {data
+            .filter(
+              (i) =>
+                i.platform === "telegram" &&
+                (i.botType === "secretary" || bot.botType === "secretary"),
+            )
+            .map((integration) => (
+              <BusinessConnectionsPanel
+                key={integration._id}
+                botId={botId}
+                integration={integration}
+              />
+            ))}
         </>
       )}
     </div>

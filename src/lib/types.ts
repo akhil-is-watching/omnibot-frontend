@@ -1,5 +1,6 @@
 export type DatasetType = "pdf" | "txt" | "md" | "text" | "website"
 export type DatasetStatus = "pending" | "processing" | "completed" | "failed"
+export type BotType = "moderator" | "secretary"
 export type Platform = "telegram" | "discord"
 export type WebhookStatus = "pending" | "active" | "failed"
 
@@ -16,6 +17,7 @@ export interface PublishedBotSnapshot {
   name: string
   description?: string
   selectedModel: string
+  botType: BotType
   systemPrompt?: string
   avatarUrl?: string
   avatarKey?: string
@@ -28,6 +30,7 @@ export interface Bot {
   name: string
   description?: string
   selectedModel: string
+  botType?: BotType
   systemPrompt?: string
   avatarUrl?: string
   avatarKey?: string
@@ -35,6 +38,10 @@ export interface Bot {
   hasUnpublishedChanges?: boolean
   publishedVersion?: number | null
   draftLinkedDatasetIds?: string[]
+  /** Secretary bots only — gate Publish until true */
+  secretaryPublishReady?: boolean
+  activeBusinessConnections?: number
+  businessConnectionCount?: number
   createdAt: string
   updatedAt: string
 }
@@ -43,6 +50,7 @@ export interface UpdateBotRequest {
   name?: string
   description?: string
   selectedModel?: string
+  botType?: BotType
   /** Empty string clears to server default. */
   systemPrompt?: string
   avatarKey?: string
@@ -93,6 +101,11 @@ export interface Integration {
   webhookRegisteredAt?: string
   platformBotId?: string
   platformUsername?: string
+  /** Denormalized from parent bot — moderator vs secretary Telegram routing */
+  botType?: BotType
+  /** Telegram only — linked Business connections (secretary bots) */
+  businessConnectionCount?: number
+  activeBusinessConnections?: number
   /** Discord only — registered slash command name (default: ask) */
   discordCommand?: string
   botToken: string
@@ -125,6 +138,15 @@ export interface CreateTelegramIntegrationRequest {
 export type CreateIntegrationRequest =
   | CreateDiscordIntegrationRequest
   | CreateTelegramIntegrationRequest
+
+export interface BusinessConnection {
+  connectionId: string
+  userId: string
+  userChatId: number
+  canReply: boolean
+  isEnabled: boolean
+  updatedAt: string
+}
 
 export interface Paginated<T> {
   data: T[]
@@ -175,7 +197,11 @@ export interface DatasetNotReady {
 export interface ApiErrorBody {
   success?: boolean
   error?: string
-  data?: Record<string, unknown> & { datasetsNotReady?: DatasetNotReady[] }
+  data?: Record<string, unknown> & {
+    datasetsNotReady?: DatasetNotReady[]
+    activeBusinessConnections?: number
+    businessConnectionCount?: number
+  }
   /** Legacy NestJS-style errors */
   statusCode?: number
   message?:

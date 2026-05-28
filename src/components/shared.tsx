@@ -1,8 +1,8 @@
 import type { ReactNode } from "react"
 import { formatDistanceToNow } from "date-fns"
-import type { DatasetStatus, WebhookStatus } from "@/lib/types"
-import type { Bot } from "@/lib/types"
+import type { Bot, BotType, DatasetStatus, WebhookStatus } from "@/lib/types"
 import { isBotPublished } from "@/lib/bot"
+import { botTypeLabel, isSecretaryPublishBlocked } from "@/lib/bot-types"
 import { Badge } from "@/components/ui/badge"
 
 const datasetVariants: Record<
@@ -44,12 +44,24 @@ export function BotPublishStatusBadge({ bot }: { bot: Bot }) {
   if (!isBotPublished(bot)) {
     return <Badge variant="outline">Unpublished</Badge>
   }
+  if (isSecretaryPublishBlocked(bot)) {
+    return <Badge variant="secondary">Awaiting Business link</Badge>
+  }
   if (bot.hasUnpublishedChanges) {
     return <Badge variant="secondary">Draft changes</Badge>
   }
   return (
     <Badge variant="default">
       Live v{bot.publishedVersion ?? bot.published?.version ?? "?"}
+    </Badge>
+  )
+}
+
+export function BotTypeBadge({ botType }: { botType?: BotType }) {
+  if (!botType) return null
+  return (
+    <Badge variant="outline" className="font-normal">
+      {botTypeLabel(botType)}
     </Badge>
   )
 }

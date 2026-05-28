@@ -3,7 +3,9 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { createBot, createBotWithAvatar } from "@/lib/api"
+import { BOT_TYPE_OPTIONS } from "@/lib/bot-types"
 import { OPENROUTER_MODELS } from "@/lib/models"
+import type { BotType } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -31,6 +33,7 @@ export function CreateBotDialog() {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [selectedModel, setSelectedModel] = useState<string>(OPENROUTER_MODELS[0].id)
+  const [botType, setBotType] = useState<BotType>("moderator")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [avatar, setAvatar] = useState<File | null>(null)
   const navigate = useNavigate()
@@ -42,6 +45,7 @@ export function CreateBotDialog() {
         return createBotWithAvatar({
           name,
           selectedModel,
+          botType,
           description,
           systemPrompt: systemPrompt.trim() || undefined,
           file: avatar,
@@ -50,6 +54,7 @@ export function CreateBotDialog() {
       return createBot({
         name,
         selectedModel,
+        botType,
         description: description || undefined,
         systemPrompt: systemPrompt.trim() || undefined,
       })
@@ -67,6 +72,7 @@ export function CreateBotDialog() {
     setName("")
     setDescription("")
     setSelectedModel(OPENROUTER_MODELS[0].id)
+    setBotType("moderator")
     setSystemPrompt("")
     setAvatar(null)
     mutation.reset()
@@ -87,7 +93,8 @@ export function CreateBotDialog() {
         <DialogHeader>
           <DialogTitle>Create bot</DialogTitle>
           <DialogDescription>
-            Configure a new bot with a model, optional system prompt, and avatar.
+            Choose a bot type, model, and optional system prompt. Bot type affects
+            Telegram routing and cannot be changed lightly after connect.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -116,6 +123,24 @@ export function CreateBotDialog() {
               placeholder="Optional description"
               rows={2}
             />
+          </div>
+          <div className="grid gap-2">
+            <Label>Bot type</Label>
+            <Select value={botType} onValueChange={(v) => setBotType(v as BotType)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BOT_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {BOT_TYPE_OPTIONS.find((o) => o.value === botType)?.description}
+            </p>
           </div>
           <div className="grid gap-2">
             <Label>Model</Label>

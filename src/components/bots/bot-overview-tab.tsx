@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import type { Bot, UpdateBotRequest } from "@/lib/types"
+import type { Bot, BotType, UpdateBotRequest } from "@/lib/types"
 import { updateBot, updateBotWithAvatar } from "@/lib/api"
+import { BOT_TYPE_OPTIONS } from "@/lib/bot-types"
 import { OPENROUTER_MODELS } from "@/lib/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ export function BotOverviewTab({ bot }: { bot: Bot }) {
   const [name, setName] = useState(bot.name)
   const [description, setDescription] = useState(bot.description ?? "")
   const [selectedModel, setSelectedModel] = useState(bot.selectedModel)
+  const [botType, setBotType] = useState<BotType>(bot.botType ?? "moderator")
   const [systemPrompt, setSystemPrompt] = useState(bot.systemPrompt ?? "")
   const [avatar, setAvatar] = useState<File | null>(null)
 
@@ -32,6 +34,7 @@ export function BotOverviewTab({ bot }: { bot: Bot }) {
     setName(bot.name)
     setDescription(bot.description ?? "")
     setSelectedModel(bot.selectedModel)
+    setBotType(bot.botType ?? "moderator")
     setSystemPrompt(bot.systemPrompt ?? "")
     setAvatar(null)
   }, [bot])
@@ -47,6 +50,7 @@ export function BotOverviewTab({ bot }: { bot: Bot }) {
         payload.description = trimmedDescription
       }
       if (selectedModel !== bot.selectedModel) payload.selectedModel = selectedModel
+      if (botType !== (bot.botType ?? "moderator")) payload.botType = botType
       if (systemPrompt !== (bot.systemPrompt ?? "")) {
         payload.systemPrompt = systemPrompt
       }
@@ -68,6 +72,7 @@ export function BotOverviewTab({ bot }: { bot: Bot }) {
     name.trim() !== bot.name ||
     (description.trim() || "") !== (bot.description ?? "") ||
     selectedModel !== bot.selectedModel ||
+    botType !== (bot.botType ?? "moderator") ||
     systemPrompt !== (bot.systemPrompt ?? "") ||
     avatar !== null
 
@@ -119,6 +124,27 @@ export function BotOverviewTab({ bot }: { bot: Bot }) {
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
         />
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Bot type</Label>
+        <Select value={botType} onValueChange={(v) => setBotType(v as BotType)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {BOT_TYPE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {BOT_TYPE_OPTIONS.find((o) => o.value === botType)?.description}. Changing
+          type re-registers an active Telegram webhook; publish still required for
+          live replies.
+        </p>
       </div>
 
       <div className="grid gap-2">

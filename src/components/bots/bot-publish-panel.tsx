@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import type { Bot, DatasetNotReady } from "@/lib/types"
 import { discardBotDraft, publishBot } from "@/lib/api"
 import { isBotPublished } from "@/lib/bot"
+import { botTypeLabel, isSecretaryPublishBlocked } from "@/lib/bot-types"
 import { getModelLabel } from "@/lib/models"
 import { getPublishNotReadyDatasets } from "@/lib/publish"
 import { Button } from "@/components/ui/button"
@@ -92,7 +93,10 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const canPublish = !published || bot.hasUnpublishedChanges || !!ingestPending
+  const secretaryBlocked = isSecretaryPublishBlocked(bot)
+  const canPublish =
+    (!published || bot.hasUnpublishedChanges || !!ingestPending) &&
+    !secretaryBlocked
 
   return (
     <div className="space-y-4 rounded-xl border p-4">
@@ -108,7 +112,8 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
             <strong>two publishes</strong>: first applies drafts and starts
             re-ingest (may show ingestion pending), second freezes live config
             once all datasets are <strong>completed</strong>. Telegram and Discord
-            use the live snapshot only.
+            use the live snapshot only. Secretary bots also need an active Telegram
+            Business link before publish.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -142,6 +147,11 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
           <Button
             onClick={() => publish.mutate()}
             disabled={!canPublish || publish.isPending}
+            title={
+              secretaryBlocked
+                ? "Connect Telegram and wait for an active Business link"
+                : undefined
+            }
           >
             {publish.isPending
               ? "Publishing…"
@@ -155,6 +165,20 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
       </div>
 
       {ingestPending && <IngestPendingNotice datasets={ingestPending} />}
+
+      {secretaryBlocked && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium">Waiting for Telegram Business link</p>
+          <p className="mt-1 text-muted-foreground">
+            Connect Telegram on the Integrations tab, enable Secretary Mode in
+            @BotFather, then have the owner link this bot in Telegram Business
+            settings. Publish unlocks when{" "}
+            <code className="text-xs">secretaryPublishReady</code> is true (
+            {bot.activeBusinessConnections ?? 0} active connection
+            {(bot.activeBusinessConnections ?? 0) === 1 ? "" : "s"}).
+          </p>
+        </div>
+      )}
 
       {publish.error && !ingestPending && (
         <ErrorMessage message={(publish.error as Error).message} />
@@ -173,6 +197,10 @@ export function BotPublishPanel({ bot }: { bot: Bot }) {
             <div>
               <dt className="text-muted-foreground">Name</dt>
               <dd>{bot.published.name}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Bot type</dt>
+              <dd>{botTypeLabel(bot.published?.botType ?? bot.botType)}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Model</dt>

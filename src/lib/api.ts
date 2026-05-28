@@ -4,6 +4,7 @@ import type {
   AuthResponse,
   AuthUser,
   Bot,
+  BusinessConnection,
   CreateDiscordIntegrationRequest,
   CreateIntegrationRequest,
   CreateIntegrationResponse,
@@ -19,6 +20,7 @@ import type {
   RegisterRequest,
   UpdateBotRequest,
   UpdateDatasetRequest,
+  BotType,
 } from "@/lib/types"
 import { validateTextDatasetContent } from "@/lib/datasets"
 import {
@@ -281,6 +283,7 @@ export async function getBot(botId: string): Promise<Bot> {
 export async function createBot(input: {
   name: string
   selectedModel: string
+  botType: BotType
   description?: string
   systemPrompt?: string
   avatarKey?: string
@@ -294,6 +297,7 @@ export async function createBot(input: {
 export async function createBotWithAvatar(input: {
   name: string
   selectedModel: string
+  botType: BotType
   description?: string
   systemPrompt?: string
   file: File
@@ -307,6 +311,7 @@ export async function createBotWithAvatar(input: {
   return createBot({
     name: input.name,
     selectedModel: input.selectedModel,
+    botType: input.botType,
     description: input.description,
     systemPrompt: input.systemPrompt,
     avatarKey: presign.key,
@@ -497,6 +502,15 @@ export function buildDiscordIntegrationBody(input: {
 
 export async function listIntegrations(botId: string): Promise<Integration[]> {
   return botmanagerJsonFetch<Integration[]>(`/bots/${botId}/integrations`)
+}
+
+export async function listBusinessConnections(
+  botId: string,
+  integrationId: string,
+): Promise<BusinessConnection[]> {
+  return botmanagerJsonFetch<BusinessConnection[]>(
+    `/bots/${botId}/integrations/${integrationId}/business-connections`,
+  )
 }
 
 export async function createIntegration(

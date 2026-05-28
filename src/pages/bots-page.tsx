@@ -31,6 +31,7 @@ import {
   PageHeader,
   RelativeTime,
   BotPublishStatusBadge,
+  BotTypeBadge,
 } from "@/components/shared"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Trash2 } from "lucide-react"
@@ -90,6 +91,7 @@ export function BotsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Bot</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -121,6 +123,9 @@ export function BotsPage() {
                           )}
                         </div>
                       </Link>
+                    </TableCell>
+                    <TableCell>
+                      <BotTypeBadge botType={bot.botType} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {getModelLabel(bot.selectedModel)}

@@ -10,9 +10,9 @@ import { BotPublishPanel } from "@/components/bots/bot-publish-panel"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BotPublishStatusBadge, ErrorMessage, RelativeTime } from "@/components/shared"
+import { BotPublishStatusBadge, BotTypeBadge, ErrorMessage, RelativeTime } from "@/components/shared"
 import { Skeleton } from "@/components/ui/skeleton"
-import { isBotPublished } from "@/lib/bot"
+import { botTypeLabel } from "@/lib/bot-types"
 import { ArrowLeft } from "lucide-react"
 
 export function BotDetailPage() {
@@ -65,12 +65,17 @@ export function BotDetailPage() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{bot.name}</h1>
+            <BotTypeBadge botType={bot.botType} />
             <BotPublishStatusBadge bot={bot} />
           </div>
           {bot.description && (
             <p className="mt-1 text-sm text-muted-foreground">{bot.description}</p>
           )}
           <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Bot type</dt>
+              <dd>{botTypeLabel(bot.botType)}</dd>
+            </div>
             <div>
               <dt className="text-muted-foreground">Draft model</dt>
               <dd>{getModelLabel(bot.selectedModel)}</dd>
@@ -108,7 +113,7 @@ export function BotDetailPage() {
           <BotPlaygroundTab botId={bot._id} />
         </TabsContent>
         <TabsContent value="integrations" className="mt-4">
-          <BotIntegrationsTab botId={bot._id} isPublished={isBotPublished(bot)} />
+          <BotIntegrationsTab bot={bot} />
         </TabsContent>
       </Tabs>
     </div>
