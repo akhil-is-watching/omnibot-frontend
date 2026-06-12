@@ -3,6 +3,23 @@ export type DatasetStatus = "pending" | "processing" | "completed" | "failed"
 export type BotType = "moderator" | "secretary"
 export type Platform = "telegram" | "discord"
 export type WebhookStatus = "pending" | "active" | "failed"
+export type HandoffCategory = "partnerships" | "investments" | "support"
+
+export interface HandoffConfig {
+  enabled: boolean
+  categories: HandoffCategory[]
+  notifyInstructions: string
+  /** Fixed reply to end users while handoff is active; server default if omitted */
+  handoffMessage?: string
+}
+
+/** PATCH .../handoff-config and optional field on POST .../integrations */
+export interface HandoffConfigInput {
+  enabled?: boolean
+  categories?: HandoffCategory[]
+  notifyInstructions?: string
+  handoffMessage?: string
+}
 
 /** Standard Bot Manager JSON envelope (except GET /api/hub/metrics). */
 export interface ApiEnvelope<T = Record<string, unknown>> {
@@ -108,6 +125,8 @@ export interface Integration {
   activeBusinessConnections?: number
   /** Discord only — registered slash command name (default: ask) */
   discordCommand?: string
+  /** Bot-to-agent handoff — per integration */
+  handoffConfig?: HandoffConfig
   botToken: string
   createdAt: string
   updatedAt: string
@@ -128,11 +147,13 @@ export interface CreateDiscordIntegrationRequest {
   discordCommand?: string
   /** Guild-scoped command (instant). Omit for global registration (~1h). */
   discordGuildId?: string
+  handoffConfig?: HandoffConfigInput
 }
 
 export interface CreateTelegramIntegrationRequest {
   platform: "telegram"
   botToken: string
+  handoffConfig?: HandoffConfigInput
 }
 
 export type CreateIntegrationRequest =

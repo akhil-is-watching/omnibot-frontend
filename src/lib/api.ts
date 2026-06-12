@@ -17,6 +17,7 @@ import type {
   Paginated,
   PlaygroundChatResponse,
   ExecuteActionResponse,
+  HandoffConfigInput,
   PresignUploadResponse,
   RegisterRequest,
   UpdateBotRequest,
@@ -533,19 +534,40 @@ export async function createIntegration(
 ): Promise<CreateIntegrationResponse> {
   const body: CreateIntegrationRequest =
     input.platform === "discord"
-      ? buildDiscordIntegrationBody({
-          botToken: input.botToken,
-          discordPublicKey: input.discordPublicKey ?? "",
-          discordGuildId: input.discordGuildId,
-          discordCommand: input.discordCommand,
-        })
-      : { platform: "telegram", botToken: input.botToken.trim() }
+      ? {
+          ...buildDiscordIntegrationBody({
+            botToken: input.botToken,
+            discordPublicKey: input.discordPublicKey ?? "",
+            discordGuildId: input.discordGuildId,
+            discordCommand: input.discordCommand,
+          }),
+          ...(input.handoffConfig ? { handoffConfig: input.handoffConfig } : {}),
+        }
+      : {
+          platform: "telegram",
+          botToken: input.botToken.trim(),
+          ...(input.handoffConfig ? { handoffConfig: input.handoffConfig } : {}),
+        }
 
   return botmanagerJsonFetch<CreateIntegrationResponse>(
     `/bots/${botId}/integrations`,
     {
       method: "POST",
       body: JSON.stringify(body),
+    },
+  )
+}
+
+export async function updateHandoffConfig(
+  botId: string,
+  integrationId: string,
+  config: HandoffConfigInput,
+): Promise<Integration> {
+  return botmanagerJsonFetch<Integration>(
+    `/bots/${botId}/integrations/${integrationId}/handoff-config`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(config),
     },
   )
 }

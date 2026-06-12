@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
-import type { Bot, CreateIntegrationResponse, Platform } from "@/lib/types"
+import type { Bot, CreateIntegrationResponse, HandoffCategory, Platform } from "@/lib/types"
 import {
   buildDiscordIntegrationBody,
   createIntegration,
@@ -20,6 +20,12 @@ import {
   formatDiscordCommand,
   formatDiscordCommandUsage,
 } from "@/lib/discord"
+import {
+  buildHandoffConfigInput,
+  validateHandoffConfig,
+} from "@/lib/handoff"
+import { HandoffConfigFields } from "@/components/bots/handoff-config-fields"
+import { HandoffConfigDialog } from "@/components/bots/handoff-config-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -61,11 +67,12 @@ import {
 import {
   EmptyState,
   ErrorMessage,
+  HandoffBadge,
   RelativeTime,
   WebhookStatusBadge,
 } from "@/components/shared"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ExternalLink, RefreshCw, Trash2 } from "lucide-react"
+import { ExternalLink, RefreshCw, Trash2, UserRoundCog } from "lucide-react"
 import { BusinessConnectionsPanel } from "@/components/bots/business-connections-panel"
 import { BotTypeBadge } from "@/components/shared"
 
@@ -90,22 +97,43 @@ function ConnectIntegrationDialog({
   const [discordCommand, setDiscordCommand] = useState("")
   const [discordGuildId, setDiscordGuildId] = useState("")
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [handoffEnabled, setHandoffEnabled] = useState(false)
+  const [handoffCategories, setHandoffCategories] = useState<HandoffCategory[]>([])
+  const [handoffNotifyInstructions, setHandoffNotifyInstructions] = useState("")
+  const [handoffMessage, setHandoffMessage] = useState("")
+  const [handoffError, setHandoffError] = useState<string | null>(null)
   const [success, setSuccess] = useState<SuccessState | null>(null)
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
     mutationFn: () => {
+      const handoffConfig = handoffEnabled
+        ? buildHandoffConfigInput({
+            enabled: true,
+            categories: handoffCategories,
+            notifyInstructions: handoffNotifyInstructions,
+            handoffMessage,
+          })
+        : undefined
+
       if (platform === "telegram") {
-        return createIntegration(botId, { platform: "telegram", botToken })
+        return createIntegration(botId, {
+          platform: "telegram",
+          botToken,
+          ...(handoffConfig ? { handoffConfig } : {}),
+        })
       }
       return createIntegration(
         botId,
-        buildDiscordIntegrationBody({
-          botToken,
-          discordPublicKey,
-          discordGuildId,
-          discordCommand,
-        }),
+        {
+          ...buildDiscordIntegrationBody({
+            botToken,
+            discordPublicKey,
+            discordGuildId,
+            discordCommand,
+          }),
+          ...(handoffConfig ? { handoffConfig } : {}),
+        },
       )
     },
     onSuccess: (data) => {
@@ -126,6 +154,11 @@ function ConnectIntegrationDialog({
     setDiscordCommand("")
     setDiscordGuildId("")
     setCommandError(null)
+    setHandoffEnabled(false)
+    setHandoffCategories([])
+    setHandoffNotifyInstructions("")
+    setHandoffMessage("")
+    setHandoffError(null)
     setSuccess(null)
     mutation.reset()
   }
@@ -271,6 +304,16 @@ function ConnectIntegrationDialog({
                 }
                 setCommandError(null)
               }
+              const nextHandoffError = validateHandoffConfig({
+                enabled: handoffEnabled,
+                categories: handoffCategories,
+                notifyInstructions: handoffNotifyInstructions,
+              })
+              if (nextHandoffError) {
+                setHandoffError(nextHandoffError)
+                return
+              }
+              setHandoffError(null)
               mutation.mutate()
             }}
           >
@@ -389,6 +432,28 @@ function ConnectIntegrationDialog({
                   Moderator Telegram requires the bot to be published first.
                 </p>
               )}
+            <HandoffConfigFields
+              enabled={handoffEnabled}
+              onEnabledChange={(next) => {
+                setHandoffEnabled(next)
+                setHandoffError(null)
+              }}
+              categories={handoffCategories}
+              onToggleCategory={(category, checked) => {
+                setHandoffCategories((prev) =>
+                  checked ? [...prev, category] : prev.filter((c) => c !== category),
+                )
+                setHandoffError(null)
+              }}
+              notifyInstructions={handoffNotifyInstructions}
+              onNotifyInstructionsChange={(value) => {
+                setHandoffNotifyInstructions(value)
+                setHandoffError(null)
+              }}
+              handoffMessage={handoffMessage}
+              onHandoffMessageChange={setHandoffMessage}
+              validationError={handoffError}
+            />
             {mutation.error && (
               <ErrorMessage message={(mutation.error as Error).message} />
             )}
@@ -415,6 +480,9 @@ function ConnectIntegrationDialog({
 export function BotIntegrationsTab({ bot }: { bot: Bot }) {
   const botId = bot._id
   const queryClient = useQueryClient()
+  const [handoffIntegrationId, setHandoffIntegrationId] = useState<string | null>(
+    null,
+  )
   const { data, isLoading, error } = useQuery({
     queryKey: ["integrations", botId],
     queryFn: () => listIntegrations(botId),
@@ -451,6 +519,8 @@ export function BotIntegrationsTab({ bot }: { bot: Bot }) {
   if (error) {
     return <ErrorMessage message={(error as Error).message} />
   }
+
+  const handoffIntegration = data?.find((i) => i._id === handoffIntegrationId)
 
   return (
     <div className="space-y-4">
@@ -507,9 +577,10 @@ export function BotIntegrationsTab({ bot }: { bot: Bot }) {
                   <TableHead>Username</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Webhook</TableHead>
+                  <TableHead>Handoff</TableHead>
                   <TableHead>Token</TableHead>
                   <TableHead>Connected</TableHead>
-                  <TableHead className="w-[120px]" />
+                  <TableHead className="w-[140px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -552,6 +623,13 @@ export function BotIntegrationsTab({ bot }: { bot: Bot }) {
                         )}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      {integration.handoffConfig?.enabled ? (
+                        <HandoffBadge config={integration.handoffConfig} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Off</span>
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-xs">
                       {integration.botToken}
                     </TableCell>
@@ -560,6 +638,14 @@ export function BotIntegrationsTab({ bot }: { bot: Bot }) {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Handoff settings"
+                          onClick={() => setHandoffIntegrationId(integration._id)}
+                        >
+                          <UserRoundCog />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -619,6 +705,16 @@ export function BotIntegrationsTab({ bot }: { bot: Bot }) {
               />
             ))}
         </>
+      )}
+      {handoffIntegration && (
+        <HandoffConfigDialog
+          botId={botId}
+          integration={handoffIntegration}
+          open={!!handoffIntegrationId}
+          onOpenChange={(open) => {
+            if (!open) setHandoffIntegrationId(null)
+          }}
+        />
       )}
     </div>
   )

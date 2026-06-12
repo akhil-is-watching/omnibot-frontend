@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { formatDistanceToNow } from "date-fns"
-import type { Bot, BotType, DatasetStatus, WebhookStatus } from "@/lib/types"
+import type { Bot, BotType, DatasetStatus, HandoffConfig, WebhookStatus } from "@/lib/types"
 import { isBotPublished } from "@/lib/bot"
 import {
   botTypeLabel,
@@ -42,6 +42,15 @@ const webhookVariants: Record<
 
 export function WebhookStatusBadge({ status }: { status: WebhookStatus }) {
   return <Badge variant={webhookVariants[status]}>{status}</Badge>
+}
+
+export function HandoffBadge({ config }: { config?: HandoffConfig }) {
+  if (!config?.enabled) return null
+  return (
+    <Badge variant="secondary" className="font-normal">
+      Handoff on
+    </Badge>
+  )
 }
 
 export function BotPublishStatusBadge({
